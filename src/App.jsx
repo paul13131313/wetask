@@ -109,9 +109,10 @@ export default function App() {
           borderRadius: 8,
           padding: '16px 18px',
           cursor: 'pointer',
-          border: '1px solid #E8E8E4',
+          border: isEditing ? '1px solid #E84855' : '1px solid #E8E8E4',
           transition: 'all 0.15s ease',
           position: 'relative',
+          zIndex: isEditing ? 50 : 1,
         }}
         className="task-card"
         onClick={() => setEditingId(isEditing ? null : task.id)}
