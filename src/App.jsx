@@ -341,9 +341,9 @@ export default function App() {
               background: '#10B98118', color: '#10B981', border: 'none',
             }}
             onClick={e => { e.stopPropagation(); markDone(task.id) }}
-            title="対応済みにする"
+            title="この雑務を完了する"
           >
-            ✅ 対応済み
+            ✓ 完了する
           </button>
         )}
 
