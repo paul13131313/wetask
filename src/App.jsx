@@ -13,20 +13,20 @@ const MEMBERS = [
 const ALL_MEMBER_IDS = MEMBERS.map(m => m.id)
 
 const INITIAL_TASKS = [
-  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignee: 'koga', rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 2, logs: [], memo: '' },
-  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignee: 'masuno', rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 5, logs: [], memo: '' },
-  { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignee: null, logs: [], memo: '' },
-  { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignee: 'sakai', logs: [], memo: '' },
-  { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignee: 'sandou', logs: [], memo: '' },
-  { id: 6, name: '備品購入', frequency: '不定期', type: 'fixed', assignee: 'takamori', logs: [], memo: '' },
-  { id: 7, name: '郵便物の管理', frequency: '不定期', type: 'flexible', assignee: null, logs: [], memo: '' },
-  { id: 8, name: 'PC・ソフトのアカウント管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda', logs: [], memo: '' },
-  { id: 9, name: '契約書管理', frequency: '不定期', type: 'fixed', assignee: 'sakai', logs: [], memo: '' },
-  { id: 10, name: 'セキュリティ管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda', logs: [], memo: '' },
-  { id: 11, name: 'プラグイン・ストレージ管理', frequency: '不定期', type: 'fixed', assignee: 'morioka', logs: [], memo: '' },
-  { id: 12, name: 'NAS整理', frequency: '月1', type: 'fixed', assignee: 'masuno', logs: [], memo: '' },
-  { id: 13, name: 'We Share Comp整理', frequency: '月1', type: 'fixed', assignee: 'takamori', logs: [], memo: '' },
-  { id: 14, name: 'HP整理', frequency: '月1', type: 'fixed', assignee: 'sandou', logs: [], memo: '' },
+  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignees: ['koga'], rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 2, logs: [], memo: '' },
+  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignees: ['masuno'], rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 5, logs: [], memo: '' },
+  { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignees: [], logs: [], memo: '' },
+  { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignees: ['sakai'], logs: [], memo: '' },
+  { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignees: ['sandou'], logs: [], memo: '' },
+  { id: 6, name: '備品購入', frequency: '不定期', type: 'fixed', assignees: ['takamori'], logs: [], memo: '' },
+  { id: 7, name: '郵便物の管理', frequency: '不定期', type: 'flexible', assignees: [], logs: [], memo: '' },
+  { id: 8, name: 'PC・ソフトのアカウント管理', frequency: '不定期', type: 'fixed', assignees: ['fukuda'], logs: [], memo: '' },
+  { id: 9, name: '契約書管理', frequency: '不定期', type: 'fixed', assignees: ['sakai'], logs: [], memo: '' },
+  { id: 10, name: 'セキュリティ管理', frequency: '不定期', type: 'fixed', assignees: ['fukuda'], logs: [], memo: '' },
+  { id: 11, name: 'プラグイン・ストレージ管理', frequency: '不定期', type: 'fixed', assignees: ['morioka'], logs: [], memo: '' },
+  { id: 12, name: 'NAS整理', frequency: '月1', type: 'fixed', assignees: ['masuno'], logs: [], memo: '' },
+  { id: 13, name: 'We Share Comp整理', frequency: '月1', type: 'fixed', assignees: ['takamori'], logs: [], memo: '' },
+  { id: 14, name: 'HP整理', frequency: '月1', type: 'fixed', assignees: ['sandou'], logs: [], memo: '' },
 ]
 
 const TYPE_CONFIG = {
@@ -77,23 +77,22 @@ export default function App() {
   const [editingId, setEditingId] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
-  const [editingMemo, setEditingMemo] = useState(null)
-  const [dragState, setDragState] = useState({ draggingId: null, overId: null })
+  const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'all') return true
     if (filter === 'flexible') return t.type === 'flexible'
-    if (filter === 'unassigned') return !t.assignee
-    return t.assignee === filter
+    if (filter === 'unassigned') return t.assignees.length === 0
+    return t.assignees.includes(filter)
   })
 
   const memberCounts = MEMBERS.map(m => ({
     ...m,
-    count: tasks.filter(t => t.assignee === m.id).length
+    count: tasks.filter(t => t.assignees.includes(m.id)).length
   }))
 
-  const unassignedCount = tasks.filter(t => !t.assignee).length
+  const unassignedCount = tasks.filter(t => t.assignees.length === 0).length
 
   function updateTask(id, changes) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...changes } : t))
@@ -106,7 +105,7 @@ export default function App() {
       name: newTask.name.trim(),
       frequency: newTask.frequency,
       type: newTask.type,
-      assignee: null,
+      assignees: [],
       logs: [],
       memo: '',
     }
@@ -124,7 +123,7 @@ export default function App() {
       if (t.id !== taskId || t.type !== 'rotation') return t
       const order = t.rotationOrder || ALL_MEMBER_IDS
       const nextIdx = ((t.rotationIndex || 0) + 1) % order.length
-      return { ...t, rotationIndex: nextIdx, assignee: order[nextIdx] }
+      return { ...t, rotationIndex: nextIdx, assignees: [order[nextIdx]] }
     }))
   }
 
@@ -133,88 +132,132 @@ export default function App() {
       if (t.id !== taskId) return t
       const newLog = {
         date: new Date().toISOString(),
-        member: t.assignee,
+        members: [...t.assignees],
       }
       const logs = [newLog, ...(t.logs || [])].slice(0, 5)
       return { ...t, logs }
     }))
   }
 
-  function handleDragStart(e, taskId) {
-    e.dataTransfer.setData('text/plain', String(taskId))
-    e.dataTransfer.effectAllowed = 'move'
-    setDragState({ draggingId: taskId, overId: null })
+  function removeAssignee(taskId, memberId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      return { ...t, assignees: t.assignees.filter(a => a !== memberId) }
+    }))
   }
 
-  function handleDragOver(e, overTaskId) {
+  function toggleAssignee(taskId, memberId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      if (t.assignees.includes(memberId)) {
+        return { ...t, assignees: t.assignees.filter(a => a !== memberId) }
+      }
+      return { ...t, assignees: [...t.assignees, memberId] }
+    }))
+  }
+
+  // --- Card drag (reorder) ---
+  function handleCardDragStart(e, taskId) {
+    e.dataTransfer.setData('text/plain', `card:${taskId}`)
+    e.dataTransfer.effectAllowed = 'move'
+    setDragState({ draggingId: taskId, overId: null, dragType: 'card' })
+  }
+
+  // --- Member drag (assign) ---
+  function handleMemberDragStart(e, memberId) {
+    e.dataTransfer.setData('text/plain', `member:${memberId}`)
+    e.dataTransfer.effectAllowed = 'copy'
+    setDragState({ draggingId: memberId, overId: null, dragType: 'member' })
+  }
+
+  function handleCardDragOver(e, overTaskId) {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.dropEffect = dragState.dragType === 'member' ? 'copy' : 'move'
     if (dragState.overId !== overTaskId) {
       setDragState(prev => ({ ...prev, overId: overTaskId }))
     }
   }
 
-  function handleDrop(e, overTaskId) {
+  function handleCardDrop(e, overTaskId) {
     e.preventDefault()
-    const draggedId = parseInt(e.dataTransfer.getData('text/plain'))
-    if (draggedId && draggedId !== overTaskId) {
-      setTasks(prev => {
-        const arr = [...prev]
-        const fromIdx = arr.findIndex(t => t.id === draggedId)
-        const toIdx = arr.findIndex(t => t.id === overTaskId)
-        if (fromIdx === -1 || toIdx === -1) return prev
-        const [item] = arr.splice(fromIdx, 1)
-        arr.splice(toIdx, 0, item)
-        return arr
-      })
+    const data = e.dataTransfer.getData('text/plain')
+
+    if (data.startsWith('member:')) {
+      // Member dropped on card → add assignee
+      const memberId = data.replace('member:', '')
+      setTasks(prev => prev.map(t => {
+        if (t.id !== overTaskId) return t
+        if (t.assignees.includes(memberId)) return t
+        return { ...t, assignees: [...t.assignees, memberId] }
+      }))
+    } else if (data.startsWith('card:')) {
+      // Card dropped on card → reorder
+      const draggedId = parseInt(data.replace('card:', ''))
+      if (draggedId && draggedId !== overTaskId) {
+        setTasks(prev => {
+          const arr = [...prev]
+          const fromIdx = arr.findIndex(t => t.id === draggedId)
+          const toIdx = arr.findIndex(t => t.id === overTaskId)
+          if (fromIdx === -1 || toIdx === -1) return prev
+          const [item] = arr.splice(fromIdx, 1)
+          arr.splice(toIdx, 0, item)
+          return arr
+        })
+      }
     }
-    setDragState({ draggingId: null, overId: null })
+    setDragState({ draggingId: null, overId: null, dragType: null })
     setMemberDragOver(null)
   }
 
-  function handleMemberDragOver(e, memberId) {
+  function handleMemberAreaDragOver(e, memberId) {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setMemberDragOver(memberId)
   }
 
-  function handleMemberDrop(e, memberId) {
+  function handleMemberAreaDrop(e, memberId) {
     e.preventDefault()
-    const draggedId = parseInt(e.dataTransfer.getData('text/plain'))
-    if (draggedId) {
-      updateTask(draggedId, { assignee: memberId || null })
+    const data = e.dataTransfer.getData('text/plain')
+    if (data.startsWith('card:')) {
+      const draggedId = parseInt(data.replace('card:', ''))
+      if (draggedId) {
+        updateTask(draggedId, { assignees: memberId ? [memberId] : [] })
+      }
     }
-    setDragState({ draggingId: null, overId: null })
+    setDragState({ draggingId: null, overId: null, dragType: null })
     setMemberDragOver(null)
   }
 
   function handleDragEnd() {
-    setDragState({ draggingId: null, overId: null })
+    setDragState({ draggingId: null, overId: null, dragType: null })
     setMemberDragOver(null)
   }
 
   function renderTaskCard(task) {
     const typeConf = TYPE_CONFIG[task.type]
-    const assigneeName = getMemberName(task.assignee)
     const isEditing = editingId === task.id
-    const isDragging = dragState.draggingId === task.id
+    const isDragging = dragState.dragType === 'card' && dragState.draggingId === task.id
     const isDragOver = dragState.overId === task.id
+    const isMemberDragOver = dragState.dragType === 'member' && dragState.overId === task.id
     const lastLog = (task.logs || [])[0]
 
     return (
       <div
         key={task.id}
         draggable
-        onDragStart={e => handleDragStart(e, task.id)}
-        onDragOver={e => handleDragOver(e, task.id)}
-        onDrop={e => handleDrop(e, task.id)}
+        onDragStart={e => handleCardDragStart(e, task.id)}
+        onDragOver={e => handleCardDragOver(e, task.id)}
+        onDrop={e => handleCardDrop(e, task.id)}
         onDragEnd={handleDragEnd}
         style={{
-          background: '#fff',
+          background: isMemberDragOver ? '#EFF6FF' : '#fff',
           borderRadius: 8,
           padding: '16px 18px',
           cursor: isDragging ? 'grabbing' : 'grab',
-          border: isEditing ? '1px solid #E84855' : isDragOver ? '2px dashed #3B82F6' : '1px solid #E8E8E4',
+          border: isEditing ? '1px solid #E84855'
+            : isMemberDragOver ? '2px dashed #3B82F6'
+            : isDragOver ? '2px dashed #9B9A97'
+            : '1px solid #E8E8E4',
           transition: 'all 0.15s ease',
           position: 'relative',
           zIndex: isEditing ? 50 : 1,
@@ -248,20 +291,51 @@ export default function App() {
           </span>
         </div>
 
-        {/* Assignee */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: '50%',
-            background: getAvatarColor(task.assignee),
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 700, color: '#fff',
-          }}>
-            {getInitials(assigneeName)}
-          </div>
-          <span style={{ fontSize: 13, color: assigneeName ? '#37352F' : '#9B9A97' }}>
-            {assigneeName || '未割当'}
-          </span>
+        {/* Assignees */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+          {task.assignees.length > 0 ? task.assignees.map(aid => (
+            <div key={aid} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: getAvatarColor(aid) + '14',
+              borderRadius: 14, padding: '2px 8px 2px 2px',
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: getAvatarColor(aid),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700, color: '#fff',
+              }}>
+                {getInitials(getMemberName(aid))}
+              </div>
+              <span style={{ fontSize: 12, color: '#37352F', fontWeight: 500 }}>
+                {getShortName(aid)}
+              </span>
+              <button
+                onClick={e => { e.stopPropagation(); removeAssignee(task.id, aid) }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 12, color: '#9B9A97', padding: 0, lineHeight: 1,
+                  fontFamily: 'inherit',
+                }}
+                title="担当を外す"
+              >
+                ×
+              </button>
+            </div>
+          )) : (
+            <span style={{ fontSize: 13, color: '#9B9A97' }}>未割当</span>
+          )}
         </div>
+
+        {/* Member drag hint on card */}
+        {isMemberDragOver && (
+          <div style={{
+            fontSize: 11, color: '#3B82F6', fontWeight: 500, textAlign: 'center',
+            padding: '4px 0',
+          }}>
+            ＋ 担当に追加
+          </div>
+        )}
 
         {/* Rotation order display */}
         {task.type === 'rotation' && task.rotationOrder && (
@@ -315,7 +389,7 @@ export default function App() {
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
             <span>✅</span>
-            <span>前回: {formatDate(lastLog.date)} {getShortName(lastLog.member)}</span>
+            <span>前回: {formatDate(lastLog.date)} {(lastLog.members || [lastLog.member]).map(m => getShortName(m)).join(', ')}</span>
           </div>
         )}
 
@@ -331,7 +405,7 @@ export default function App() {
         )}
 
         {/* Done button */}
-        {task.assignee && !isEditing && (
+        {task.assignees.length > 0 && !isEditing && (
           <button
             className="filter-btn"
             style={{
@@ -359,22 +433,43 @@ export default function App() {
             }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Assignee select */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当者</div>
-            <select
-              value={task.assignee || ''}
-              onChange={e => updateTask(task.id, { assignee: e.target.value || null })}
-              style={{
-                width: '100%', padding: '6px 8px', fontSize: 13,
-                border: '1px solid #E8E8E4', borderRadius: 6, background: '#F7F7F5',
-                marginBottom: 10, fontFamily: 'inherit',
-              }}
-            >
-              <option value="">未割当</option>
-              {MEMBERS.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+            {/* Assignee checkboxes */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当者（複数選択可）</div>
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10,
+              background: '#F7F7F5', borderRadius: 6, padding: '8px 10px',
+            }}>
+              {MEMBERS.map(m => {
+                const isChecked = task.assignees.includes(m.id)
+                return (
+                  <label
+                    key={m.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      cursor: 'pointer', fontSize: 13, padding: '3px 0',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleAssignee(task.id, m.id)}
+                      style={{ accentColor: getAvatarColor(m.id) }}
+                    />
+                    <div style={{
+                      width: 20, height: 20, borderRadius: '50%',
+                      background: getAvatarColor(m.id),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, fontWeight: 700, color: '#fff',
+                    }}>
+                      {getInitials(m.name)}
+                    </div>
+                    <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? '#37352F' : '#9B9A97' }}>
+                      {m.name}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
 
             {/* Type select */}
             <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当タイプ</div>
@@ -384,7 +479,7 @@ export default function App() {
                 const changes = { type: e.target.value }
                 if (e.target.value === 'rotation' && !task.rotationOrder) {
                   changes.rotationOrder = [...ALL_MEMBER_IDS]
-                  changes.rotationIndex = task.assignee ? ALL_MEMBER_IDS.indexOf(task.assignee) : 0
+                  changes.rotationIndex = task.assignees[0] ? ALL_MEMBER_IDS.indexOf(task.assignees[0]) : 0
                   if (changes.rotationIndex === -1) changes.rotationIndex = 0
                 }
                 updateTask(task.id, changes)
@@ -427,7 +522,9 @@ export default function App() {
                     }}>
                       <span style={{ color: '#10B981' }}>✅</span>
                       <span>{formatDate(log.date)}</span>
-                      <span style={{ fontWeight: 600 }}>{getShortName(log.member)}</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {(log.members || [log.member]).map(m => getShortName(m)).join(', ')}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -443,13 +540,13 @@ export default function App() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
         {MEMBERS.map(member => {
-          const memberTasks = tasks.filter(t => t.assignee === member.id)
+          const memberTasks = tasks.filter(t => t.assignees.includes(member.id))
           const isDragTarget = memberDragOver === member.id
           return (
             <div
               key={member.id}
-              onDragOver={e => handleMemberDragOver(e, member.id)}
-              onDrop={e => handleMemberDrop(e, member.id)}
+              onDragOver={e => handleMemberAreaDragOver(e, member.id)}
+              onDrop={e => handleMemberAreaDrop(e, member.id)}
               onDragLeave={() => setMemberDragOver(null)}
               style={{
                 padding: 12, borderRadius: 8,
@@ -492,12 +589,12 @@ export default function App() {
           )
         })}
         {(() => {
-          const unassigned = tasks.filter(t => !t.assignee)
+          const unassigned = tasks.filter(t => t.assignees.length === 0)
           const isDragTarget = memberDragOver === 'unassigned'
           return (
             <div
-              onDragOver={e => handleMemberDragOver(e, null)}
-              onDrop={e => handleMemberDrop(e, null)}
+              onDragOver={e => handleMemberAreaDragOver(e, null)}
+              onDrop={e => handleMemberAreaDrop(e, null)}
               onDragLeave={() => setMemberDragOver(null)}
               style={{
                 padding: 12, borderRadius: 8,
@@ -542,6 +639,8 @@ export default function App() {
         .filter-btn:hover { opacity: 0.85; }
         select:focus, input:focus, textarea:focus { outline: none; border-color: #E84855 !important; }
         [draggable=true] { user-select: none; }
+        .member-chip { cursor: grab; user-select: none; }
+        .member-chip:active { cursor: grabbing; }
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }} onClick={() => editingId && setEditingId(null)}>
@@ -554,7 +653,7 @@ export default function App() {
           <p style={{ fontSize: 14, color: '#9B9A97' }}>チームの雑務を見える化するボード</p>
         </div>
 
-        {/* Member Summary — drag targets */}
+        {/* Member Summary — draggable avatars */}
         <div style={{
           display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20,
           padding: '14px 16px', background: '#fff', borderRadius: 8, border: '1px solid #E8E8E4',
@@ -562,15 +661,15 @@ export default function App() {
           {memberCounts.map(m => (
             <div
               key={m.id}
-              onDragOver={e => handleMemberDragOver(e, m.id)}
-              onDrop={e => handleMemberDrop(e, m.id)}
-              onDragLeave={() => setMemberDragOver(null)}
+              draggable
+              onDragStart={e => handleMemberDragStart(e, m.id)}
+              onDragEnd={handleDragEnd}
+              className="member-chip"
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '4px 10px', borderRadius: 6, fontSize: 13,
-                background: memberDragOver === m.id ? getAvatarColor(m.id) + '30' : filter === m.id ? getAvatarColor(m.id) + '18' : 'transparent',
-                cursor: 'pointer',
-                border: memberDragOver === m.id ? '2px dashed ' + getAvatarColor(m.id) : '2px solid transparent',
+                background: filter === m.id ? getAvatarColor(m.id) + '18' : 'transparent',
+                border: '2px solid transparent',
                 transition: 'all 0.15s',
               }}
               onClick={() => setFilter(filter === m.id ? 'all' : m.id)}
@@ -614,12 +713,21 @@ export default function App() {
         </div>
 
         {/* Drag hint */}
-        {dragState.draggingId && (
+        {dragState.dragType === 'member' && (
           <div style={{
             textAlign: 'center', padding: '8px 0', marginBottom: 8,
             fontSize: 12, color: '#3B82F6', fontWeight: 500,
+            background: '#EFF6FF', borderRadius: 6,
           }}>
-            💡 メンバーのアイコンにドロップして担当を変更 / カード同士でドロップして順番を入れ替え
+            👤 メンバーをカードにドロップして担当に追加
+          </div>
+        )}
+        {dragState.dragType === 'card' && (
+          <div style={{
+            textAlign: 'center', padding: '8px 0', marginBottom: 8,
+            fontSize: 12, color: '#6B7280', fontWeight: 500,
+          }}>
+            💡 カード同士でドロップして順番を入れ替え
           </div>
         )}
 
