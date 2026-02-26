@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 
-const MEMBERS = [
+const INITIAL_MEMBERS = [
   { id: 'fukuda', name: '福田将己', role: '代表取締役' },
   { id: 'sandou', name: 'サンドウ タカユキ', role: '取締役' },
   { id: 'koga', name: '古賀光紗', role: 'モーション' },
@@ -9,8 +9,6 @@ const MEMBERS = [
   { id: 'masuno', name: '増野雄亮', role: 'モーション' },
   { id: 'sakai', name: '酒井沙貴', role: 'PM' },
 ]
-
-const ALL_MEMBER_IDS = MEMBERS.map(m => m.id)
 
 const INITIAL_TASKS = [
   { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignees: ['koga'], rotationOrder: ['koga', 'masuno', 'morioka'], rotationIndex: 0, logs: [], memo: '' },
@@ -41,28 +39,11 @@ const FREQ_COLORS = {
   '不定期': '#6B7280',
 }
 
-function getMemberName(id) {
-  if (!id) return null
-  const m = MEMBERS.find(m => m.id === id)
-  return m ? m.name : null
-}
-
-function getShortName(id) {
-  const name = getMemberName(id)
-  if (!name) return '?'
-  return name.length > 3 ? name.substring(0, 3) : name
-}
+const AVATAR_COLORS = ['#E84855', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#0EA5E9', '#D946EF', '#84CC16']
 
 function getInitials(name) {
   if (!name) return '?'
   return name.charAt(0)
-}
-
-function getAvatarColor(id) {
-  const colors = ['#E84855', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4']
-  if (!id) return '#D1D5DB'
-  const idx = MEMBERS.findIndex(m => m.id === id)
-  return colors[idx % colors.length]
 }
 
 function formatDate(dateStr) {
@@ -71,16 +52,46 @@ function formatDate(dateStr) {
 }
 
 export default function App() {
+  const [members, setMembers] = useState(INITIAL_MEMBERS)
   const [tasks, setTasks] = useState(INITIAL_TASKS)
   const [view, setView] = useState('board')
   const [filter, setFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
+  const [newMember, setNewMember] = useState({ name: '', role: '' })
   const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
-  // 完了ボタン押下時の対応者選択UI用state
   const [doneSelectingId, setDoneSelectingId] = useState(null)
+
+  // Helper functions using members state
+  function getMemberName(id) {
+    if (!id) return null
+    const m = members.find(m => m.id === id)
+    return m ? m.name : null
+  }
+
+  function getShortName(id) {
+    const name = getMemberName(id)
+    if (!name) return '?'
+    return name.length > 3 ? name.substring(0, 3) : name
+  }
+
+  function getAvatarColor(id) {
+    if (!id) return '#D1D5DB'
+    const idx = members.findIndex(m => m.id === id)
+    if (idx === -1) return '#D1D5DB'
+    return AVATAR_COLORS[idx % AVATAR_COLORS.length]
+  }
+
+  function addMember() {
+    if (!newMember.name.trim()) return
+    const id = newMember.name.trim().toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()
+    setMembers(prev => [...prev, { id, name: newMember.name.trim(), role: newMember.role.trim() || 'メンバー' }])
+    setNewMember({ name: '', role: '' })
+    setShowAddMemberModal(false)
+  }
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'all') return true
@@ -89,7 +100,7 @@ export default function App() {
     return t.assignees.includes(filter)
   })
 
-  const memberCounts = MEMBERS.map(m => ({
+  const memberCounts = members.map(m => ({
     ...m,
     count: tasks.filter(t => t.assignees.includes(m.id)).length
   }))
@@ -123,7 +134,7 @@ export default function App() {
   function rotateNext(taskId) {
     setTasks(prev => prev.map(t => {
       if (t.id !== taskId || t.type !== 'rotation') return t
-      const order = t.rotationOrder || ALL_MEMBER_IDS
+      const order = t.rotationOrder || members.map(m => m.id)
       const nextIdx = ((t.rotationIndex || 0) + 1) % order.length
       return { ...t, rotationIndex: nextIdx, assignees: [order[nextIdx]] }
     }))
@@ -482,7 +493,7 @@ export default function App() {
               誰が対応しましたか？
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {MEMBERS.map(m => {
+              {members.map(m => {
                 const isAssignee = task.assignees.includes(m.id)
                 return (
                   <button
@@ -569,7 +580,7 @@ export default function App() {
                   background: '#EFF6FF', borderRadius: 6, padding: '8px 10px',
                   border: '1px solid #3B82F620',
                 }}>
-                  {MEMBERS.map(m => {
+                  {members.map(m => {
                     const isInRotation = (task.rotationOrder || []).includes(m.id)
                     return (
                       <label
@@ -611,7 +622,7 @@ export default function App() {
                   display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10,
                   background: '#F7F7F5', borderRadius: 6, padding: '8px 10px',
                 }}>
-                  {MEMBERS.map(m => {
+                  {members.map(m => {
                     const isChecked = task.assignees.includes(m.id)
                     return (
                       <label
@@ -704,7 +715,7 @@ export default function App() {
   function renderMemberView() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-        {MEMBERS.map(member => {
+        {members.map(member => {
           const memberTasks = tasks.filter(t => t.assignees.includes(member.id))
           const isDragTarget = memberDragOver === member.id
           return (
@@ -875,6 +886,21 @@ export default function App() {
               </span>
             </div>
           )}
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 6, fontSize: 13,
+              cursor: 'pointer', color: '#9B9A97',
+            }}
+            onClick={() => setShowAddMemberModal(true)}
+          >
+            <span style={{
+              width: 22, height: 22, borderRadius: '50%', background: '#E8E8E4',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, fontWeight: 600, color: '#9B9A97',
+            }}>＋</span>
+            <span style={{ fontSize: 12 }}>追加</span>
+          </div>
         </div>
 
         {/* Drag hint */}
@@ -1067,6 +1093,80 @@ export default function App() {
                 }}
                 onClick={addTask}
                 disabled={!newTask.name.trim()}
+              >
+                追加する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Modal */}
+      {showAddMemberModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}
+          onClick={() => setShowAddMemberModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 380,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: '#37352F' }}>
+              👤 メンバーを追加
+            </h2>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', display: 'block', marginBottom: 4 }}>名前</label>
+              <input
+                type="text"
+                value={newMember.name}
+                onChange={e => setNewMember({ ...newMember, name: e.target.value })}
+                placeholder="例: 山田太郎"
+                style={{
+                  width: '100%', padding: '8px 12px', fontSize: 14,
+                  border: '1px solid #E8E8E4', borderRadius: 6, fontFamily: 'inherit',
+                }}
+                autoFocus
+              />
+            </div>
+            <div style={{ marginBottom: 22 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', display: 'block', marginBottom: 4 }}>役割</label>
+              <input
+                type="text"
+                value={newMember.role}
+                onChange={e => setNewMember({ ...newMember, role: e.target.value })}
+                placeholder="例: デザイナー"
+                style={{
+                  width: '100%', padding: '8px 12px', fontSize: 14,
+                  border: '1px solid #E8E8E4', borderRadius: 6, fontFamily: 'inherit',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+                  background: '#F0F0EE', color: '#37352F', border: 'none',
+                }}
+                onClick={() => setShowAddMemberModal(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                  background: '#3B82F6', color: '#fff', border: 'none',
+                  opacity: newMember.name.trim() ? 1 : 0.5,
+                }}
+                onClick={addMember}
+                disabled={!newMember.name.trim()}
               >
                 追加する
               </button>
