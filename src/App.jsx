@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
 const MEMBERS = [
   { id: 'fukuda', name: '福田将己', role: '代表取締役' },
@@ -10,21 +10,23 @@ const MEMBERS = [
   { id: 'sakai', name: '酒井沙貴', role: 'PM' },
 ]
 
+const ALL_MEMBER_IDS = MEMBERS.map(m => m.id)
+
 const INITIAL_TASKS = [
-  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignee: 'koga' },
-  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignee: 'masuno' },
-  { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignee: null },
-  { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignee: 'sakai' },
-  { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignee: 'sandou' },
-  { id: 6, name: '備品購入', frequency: '不定期', type: 'fixed', assignee: 'takamori' },
-  { id: 7, name: '郵便物の管理', frequency: '不定期', type: 'flexible', assignee: null },
-  { id: 8, name: 'PC・ソフトのアカウント管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda' },
-  { id: 9, name: '契約書管理', frequency: '不定期', type: 'fixed', assignee: 'sakai' },
-  { id: 10, name: 'セキュリティ管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda' },
-  { id: 11, name: 'プラグイン・ストレージ管理', frequency: '不定期', type: 'fixed', assignee: 'morioka' },
-  { id: 12, name: 'NAS整理', frequency: '月1', type: 'fixed', assignee: 'masuno' },
-  { id: 13, name: 'We Share Comp整理', frequency: '月1', type: 'fixed', assignee: 'takamori' },
-  { id: 14, name: 'HP整理', frequency: '月1', type: 'fixed', assignee: 'sandou' },
+  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignee: 'koga', rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 2, logs: [], memo: '' },
+  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignee: 'masuno', rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 5, logs: [], memo: '' },
+  { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignee: null, logs: [], memo: '' },
+  { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignee: 'sakai', logs: [], memo: '' },
+  { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignee: 'sandou', logs: [], memo: '' },
+  { id: 6, name: '備品購入', frequency: '不定期', type: 'fixed', assignee: 'takamori', logs: [], memo: '' },
+  { id: 7, name: '郵便物の管理', frequency: '不定期', type: 'flexible', assignee: null, logs: [], memo: '' },
+  { id: 8, name: 'PC・ソフトのアカウント管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda', logs: [], memo: '' },
+  { id: 9, name: '契約書管理', frequency: '不定期', type: 'fixed', assignee: 'sakai', logs: [], memo: '' },
+  { id: 10, name: 'セキュリティ管理', frequency: '不定期', type: 'fixed', assignee: 'fukuda', logs: [], memo: '' },
+  { id: 11, name: 'プラグイン・ストレージ管理', frequency: '不定期', type: 'fixed', assignee: 'morioka', logs: [], memo: '' },
+  { id: 12, name: 'NAS整理', frequency: '月1', type: 'fixed', assignee: 'masuno', logs: [], memo: '' },
+  { id: 13, name: 'We Share Comp整理', frequency: '月1', type: 'fixed', assignee: 'takamori', logs: [], memo: '' },
+  { id: 14, name: 'HP整理', frequency: '月1', type: 'fixed', assignee: 'sandou', logs: [], memo: '' },
 ]
 
 const TYPE_CONFIG = {
@@ -45,6 +47,12 @@ function getMemberName(id) {
   return m ? m.name : null
 }
 
+function getShortName(id) {
+  const name = getMemberName(id)
+  if (!name) return '?'
+  return name.length > 3 ? name.substring(0, 3) : name
+}
+
 function getInitials(name) {
   if (!name) return '?'
   return name.charAt(0)
@@ -57,6 +65,11 @@ function getAvatarColor(id) {
   return colors[idx % colors.length]
 }
 
+function formatDate(dateStr) {
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 export default function App() {
   const [tasks, setTasks] = useState(INITIAL_TASKS)
   const [view, setView] = useState('board')
@@ -64,6 +77,9 @@ export default function App() {
   const [editingId, setEditingId] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
+  const [editingMemo, setEditingMemo] = useState(null)
+  const [dragState, setDragState] = useState({ draggingId: null, overId: null })
+  const [memberDragOver, setMemberDragOver] = useState(null)
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'all') return true
@@ -85,66 +101,155 @@ export default function App() {
 
   function addTask() {
     if (!newTask.name.trim()) return
-    setTasks(prev => [...prev, {
+    const task = {
       id: Date.now(),
       name: newTask.name.trim(),
       frequency: newTask.frequency,
       type: newTask.type,
       assignee: null,
-    }])
+      logs: [],
+      memo: '',
+    }
+    if (newTask.type === 'rotation') {
+      task.rotationOrder = [...ALL_MEMBER_IDS]
+      task.rotationIndex = 0
+    }
+    setTasks(prev => [...prev, task])
     setNewTask({ name: '', frequency: '不定期', type: 'fixed' })
     setShowAddModal(false)
+  }
+
+  function rotateNext(taskId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId || t.type !== 'rotation') return t
+      const order = t.rotationOrder || ALL_MEMBER_IDS
+      const nextIdx = ((t.rotationIndex || 0) + 1) % order.length
+      return { ...t, rotationIndex: nextIdx, assignee: order[nextIdx] }
+    }))
+  }
+
+  function markDone(taskId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      const newLog = {
+        date: new Date().toISOString(),
+        member: t.assignee,
+      }
+      const logs = [newLog, ...(t.logs || [])].slice(0, 5)
+      return { ...t, logs }
+    }))
+  }
+
+  function handleDragStart(e, taskId) {
+    e.dataTransfer.setData('text/plain', String(taskId))
+    e.dataTransfer.effectAllowed = 'move'
+    setDragState({ draggingId: taskId, overId: null })
+  }
+
+  function handleDragOver(e, overTaskId) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragState.overId !== overTaskId) {
+      setDragState(prev => ({ ...prev, overId: overTaskId }))
+    }
+  }
+
+  function handleDrop(e, overTaskId) {
+    e.preventDefault()
+    const draggedId = parseInt(e.dataTransfer.getData('text/plain'))
+    if (draggedId && draggedId !== overTaskId) {
+      setTasks(prev => {
+        const arr = [...prev]
+        const fromIdx = arr.findIndex(t => t.id === draggedId)
+        const toIdx = arr.findIndex(t => t.id === overTaskId)
+        if (fromIdx === -1 || toIdx === -1) return prev
+        const [item] = arr.splice(fromIdx, 1)
+        arr.splice(toIdx, 0, item)
+        return arr
+      })
+    }
+    setDragState({ draggingId: null, overId: null })
+    setMemberDragOver(null)
+  }
+
+  function handleMemberDragOver(e, memberId) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setMemberDragOver(memberId)
+  }
+
+  function handleMemberDrop(e, memberId) {
+    e.preventDefault()
+    const draggedId = parseInt(e.dataTransfer.getData('text/plain'))
+    if (draggedId) {
+      updateTask(draggedId, { assignee: memberId || null })
+    }
+    setDragState({ draggingId: null, overId: null })
+    setMemberDragOver(null)
+  }
+
+  function handleDragEnd() {
+    setDragState({ draggingId: null, overId: null })
+    setMemberDragOver(null)
   }
 
   function renderTaskCard(task) {
     const typeConf = TYPE_CONFIG[task.type]
     const assigneeName = getMemberName(task.assignee)
     const isEditing = editingId === task.id
+    const isDragging = dragState.draggingId === task.id
+    const isDragOver = dragState.overId === task.id
+    const lastLog = (task.logs || [])[0]
 
     return (
       <div
         key={task.id}
+        draggable
+        onDragStart={e => handleDragStart(e, task.id)}
+        onDragOver={e => handleDragOver(e, task.id)}
+        onDrop={e => handleDrop(e, task.id)}
+        onDragEnd={handleDragEnd}
         style={{
           background: '#fff',
           borderRadius: 8,
           padding: '16px 18px',
-          cursor: 'pointer',
-          border: isEditing ? '1px solid #E84855' : '1px solid #E8E8E4',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          border: isEditing ? '1px solid #E84855' : isDragOver ? '2px dashed #3B82F6' : '1px solid #E8E8E4',
           transition: 'all 0.15s ease',
           position: 'relative',
           zIndex: isEditing ? 50 : 1,
+          opacity: isDragging ? 0.5 : 1,
         }}
         className="task-card"
         onClick={() => setEditingId(isEditing ? null : task.id)}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#37352F', marginBottom: 10 }}>
+        {/* Task Name */}
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#37352F', marginBottom: 8 }}>
           {task.name}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+
+        {/* Badges */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           <span style={{
-            display: 'inline-block',
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '2px 8px',
-            borderRadius: 4,
+            display: 'inline-block', fontSize: 11, fontWeight: 600,
+            padding: '2px 8px', borderRadius: 4,
             background: FREQ_COLORS[task.frequency] + '18',
             color: FREQ_COLORS[task.frequency],
           }}>
             {task.frequency}
           </span>
           <span style={{
-            display: 'inline-block',
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '2px 8px',
-            borderRadius: 4,
+            display: 'inline-block', fontSize: 11, fontWeight: 600,
+            padding: '2px 8px', borderRadius: 4,
             background: typeConf.color + '18',
             color: typeConf.color,
           }}>
             {typeConf.emoji} {typeConf.label}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+        {/* Assignee */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <div style={{
             width: 26, height: 26, borderRadius: '50%',
             background: getAvatarColor(task.assignee),
@@ -158,6 +263,91 @@ export default function App() {
           </span>
         </div>
 
+        {/* Rotation order display */}
+        {task.type === 'rotation' && task.rotationOrder && (
+          <div style={{ marginBottom: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+              {task.rotationOrder.map((mid, i) => {
+                const isCurrent = i === (task.rotationIndex || 0)
+                const isNext = i === ((task.rotationIndex || 0) + 1) % task.rotationOrder.length
+                return (
+                  <div key={mid} style={{
+                    display: 'flex', alignItems: 'center', gap: 2,
+                  }}>
+                    <div style={{
+                      width: isCurrent ? 24 : 18,
+                      height: isCurrent ? 24 : 18,
+                      borderRadius: '50%',
+                      background: getAvatarColor(mid),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: isCurrent ? 10 : 8, fontWeight: 700, color: '#fff',
+                      border: isCurrent ? '2px solid #37352F' : isNext ? '2px dashed #9B9A97' : '1px solid transparent',
+                      opacity: isCurrent ? 1 : isNext ? 0.8 : 0.4,
+                      transition: 'all 0.15s',
+                    }} title={getMemberName(mid) + (isCurrent ? '（今）' : isNext ? '（次）' : '')}>
+                      {getInitials(getMemberName(mid))}
+                    </div>
+                    {i < task.rotationOrder.length - 1 && (
+                      <span style={{ fontSize: 8, color: '#D1D5DB' }}>→</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <button
+              className="filter-btn"
+              style={{
+                marginTop: 6, padding: '3px 10px', borderRadius: 4,
+                fontSize: 11, fontWeight: 600, background: '#3B82F618',
+                color: '#3B82F6', border: 'none',
+              }}
+              onClick={e => { e.stopPropagation(); rotateNext(task.id) }}
+            >
+              🔄 次の人へ
+            </button>
+          </div>
+        )}
+
+        {/* Last log */}
+        {lastLog && (
+          <div style={{
+            fontSize: 11, color: '#9B9A97', marginTop: 4,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span>✅</span>
+            <span>前回: {formatDate(lastLog.date)} {getShortName(lastLog.member)}</span>
+          </div>
+        )}
+
+        {/* Memo preview */}
+        {task.memo && !isEditing && (
+          <div style={{
+            fontSize: 11, color: '#6B7280', marginTop: 4,
+            background: '#F7F7F5', borderRadius: 4, padding: '4px 8px',
+            whiteSpace: 'pre-wrap', maxHeight: 40, overflow: 'hidden',
+          }}>
+            📝 {task.memo.length > 30 ? task.memo.substring(0, 30) + '…' : task.memo}
+          </div>
+        )}
+
+        {/* Done button */}
+        {task.assignee && !isEditing && (
+          <button
+            className="filter-btn"
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              padding: '3px 8px', borderRadius: 4,
+              fontSize: 11, fontWeight: 600,
+              background: '#10B98118', color: '#10B981', border: 'none',
+            }}
+            onClick={e => { e.stopPropagation(); markDone(task.id) }}
+            title="対応済みにする"
+          >
+            ✅ 対応済み
+          </button>
+        )}
+
+        {/* Edit panel */}
         {isEditing && (
           <div
             style={{
@@ -165,9 +355,11 @@ export default function App() {
               background: '#fff', border: '1px solid #E8E8E4', borderRadius: 8,
               padding: 14, marginTop: 4,
               boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+              maxHeight: 420, overflowY: 'auto',
             }}
             onClick={e => e.stopPropagation()}
           >
+            {/* Assignee select */}
             <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当者</div>
             <select
               value={task.assignee || ''}
@@ -183,20 +375,64 @@ export default function App() {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
+
+            {/* Type select */}
             <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当タイプ</div>
             <select
               value={task.type}
-              onChange={e => updateTask(task.id, { type: e.target.value })}
+              onChange={e => {
+                const changes = { type: e.target.value }
+                if (e.target.value === 'rotation' && !task.rotationOrder) {
+                  changes.rotationOrder = [...ALL_MEMBER_IDS]
+                  changes.rotationIndex = task.assignee ? ALL_MEMBER_IDS.indexOf(task.assignee) : 0
+                  if (changes.rotationIndex === -1) changes.rotationIndex = 0
+                }
+                updateTask(task.id, changes)
+              }}
               style={{
                 width: '100%', padding: '6px 8px', fontSize: 13,
                 border: '1px solid #E8E8E4', borderRadius: 6, background: '#F7F7F5',
-                fontFamily: 'inherit',
+                marginBottom: 10, fontFamily: 'inherit',
               }}
             >
               {Object.entries(TYPE_CONFIG).map(([key, conf]) => (
                 <option key={key} value={key}>{conf.emoji} {conf.label}</option>
               ))}
             </select>
+
+            {/* Memo */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>📝 メモ</div>
+            <textarea
+              value={task.memo || ''}
+              onChange={e => updateTask(task.id, { memo: e.target.value })}
+              placeholder="引き継ぎ事項、注意点など..."
+              style={{
+                width: '100%', padding: '6px 8px', fontSize: 12,
+                border: '1px solid #E8E8E4', borderRadius: 6, background: '#F7F7F5',
+                fontFamily: 'inherit', resize: 'vertical', minHeight: 50,
+                marginBottom: 10,
+              }}
+            />
+
+            {/* Logs */}
+            {task.logs && task.logs.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>📋 対応履歴（直近5件）</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {task.logs.map((log, i) => (
+                    <div key={i} style={{
+                      fontSize: 11, color: '#6B7280', padding: '3px 8px',
+                      background: '#F7F7F5', borderRadius: 4,
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <span style={{ color: '#10B981' }}>✅</span>
+                      <span>{formatDate(log.date)}</span>
+                      <span style={{ fontWeight: 600 }}>{getShortName(log.member)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -208,9 +444,20 @@ export default function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
         {MEMBERS.map(member => {
           const memberTasks = tasks.filter(t => t.assignee === member.id)
-          if (memberTasks.length === 0) return null
+          const isDragTarget = memberDragOver === member.id
           return (
-            <div key={member.id}>
+            <div
+              key={member.id}
+              onDragOver={e => handleMemberDragOver(e, member.id)}
+              onDrop={e => handleMemberDrop(e, member.id)}
+              onDragLeave={() => setMemberDragOver(null)}
+              style={{
+                padding: 12, borderRadius: 8,
+                border: isDragTarget ? '2px dashed #3B82F6' : '2px solid transparent',
+                background: isDragTarget ? '#3B82F608' : 'transparent',
+                transition: 'all 0.15s',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <div style={{
                   width: 32, height: 32, borderRadius: '50%',
@@ -225,31 +472,58 @@ export default function App() {
                   <div style={{ fontSize: 12, color: '#9B9A97' }}>{member.role}・{memberTasks.length}件</div>
                 </div>
               </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 10,
-              }}>
-                {memberTasks.map(renderTaskCard)}
-              </div>
+              {memberTasks.length > 0 ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                  gap: 10,
+                }}>
+                  {memberTasks.map(renderTaskCard)}
+                </div>
+              ) : (
+                <div style={{
+                  padding: '16px', textAlign: 'center', color: '#D1D5DB',
+                  fontSize: 13, border: '1px dashed #E8E8E4', borderRadius: 8,
+                }}>
+                  カードをドラッグしてここにドロップ
+                </div>
+              )}
             </div>
           )
         })}
         {(() => {
           const unassigned = tasks.filter(t => !t.assignee)
-          if (unassigned.length === 0) return null
+          const isDragTarget = memberDragOver === 'unassigned'
           return (
-            <div>
+            <div
+              onDragOver={e => handleMemberDragOver(e, null)}
+              onDrop={e => handleMemberDrop(e, null)}
+              onDragLeave={() => setMemberDragOver(null)}
+              style={{
+                padding: 12, borderRadius: 8,
+                border: isDragTarget ? '2px dashed #9B9A97' : '2px solid transparent',
+                transition: 'all 0.15s',
+              }}
+            >
               <div style={{ fontSize: 15, fontWeight: 600, color: '#9B9A97', marginBottom: 12 }}>
                 未割当（{unassigned.length}件）
               </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 10,
-              }}>
-                {unassigned.map(renderTaskCard)}
-              </div>
+              {unassigned.length > 0 ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                  gap: 10,
+                }}>
+                  {unassigned.map(renderTaskCard)}
+                </div>
+              ) : (
+                <div style={{
+                  padding: '16px', textAlign: 'center', color: '#D1D5DB',
+                  fontSize: 13, border: '1px dashed #E8E8E4', borderRadius: 8,
+                }}>
+                  カードをドラッグして未割当にする
+                </div>
+              )}
             </div>
           )
         })()}
@@ -263,13 +537,14 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Noto Sans JP', sans-serif; background: #F7F7F5; color: #37352F; }
-        .task-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #D4D4D0; transform: translateY(-1px); }
+        .task-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #D4D4D0 !important; transform: translateY(-1px); }
         .filter-btn { cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; }
         .filter-btn:hover { opacity: 0.85; }
-        select:focus, input:focus { outline: none; border-color: #E84855 !important; }
+        select:focus, input:focus, textarea:focus { outline: none; border-color: #E84855 !important; }
+        [draggable=true] { user-select: none; }
       `}</style>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }} onClick={() => editingId && setEditingId(null)}>
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -279,7 +554,7 @@ export default function App() {
           <p style={{ fontSize: 14, color: '#9B9A97' }}>チームの雑務を見える化するボード</p>
         </div>
 
-        {/* Member Summary */}
+        {/* Member Summary — drag targets */}
         <div style={{
           display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20,
           padding: '14px 16px', background: '#fff', borderRadius: 8, border: '1px solid #E8E8E4',
@@ -287,11 +562,16 @@ export default function App() {
           {memberCounts.map(m => (
             <div
               key={m.id}
+              onDragOver={e => handleMemberDragOver(e, m.id)}
+              onDrop={e => handleMemberDrop(e, m.id)}
+              onDragLeave={() => setMemberDragOver(null)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '4px 10px', borderRadius: 6, fontSize: 13,
-                background: filter === m.id ? getAvatarColor(m.id) + '18' : 'transparent',
+                background: memberDragOver === m.id ? getAvatarColor(m.id) + '30' : filter === m.id ? getAvatarColor(m.id) + '18' : 'transparent',
                 cursor: 'pointer',
+                border: memberDragOver === m.id ? '2px dashed ' + getAvatarColor(m.id) : '2px solid transparent',
+                transition: 'all 0.15s',
               }}
               onClick={() => setFilter(filter === m.id ? 'all' : m.id)}
             >
@@ -332,6 +612,16 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Drag hint */}
+        {dragState.draggingId && (
+          <div style={{
+            textAlign: 'center', padding: '8px 0', marginBottom: 8,
+            fontSize: 12, color: '#3B82F6', fontWeight: 500,
+          }}>
+            💡 メンバーのアイコンにドロップして担当を変更 / カード同士でドロップして順番を入れ替え
+          </div>
+        )}
 
         {/* Controls */}
         <div style={{
@@ -402,7 +692,7 @@ export default function App() {
         {view === 'board' ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: 12,
           }}>
             {filteredTasks.map(renderTaskCard)}
