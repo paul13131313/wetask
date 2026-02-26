@@ -79,6 +79,8 @@ export default function App() {
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
   const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
+  // 完了ボタン押下時の対応者選択UI用state
+  const [doneSelectingId, setDoneSelectingId] = useState(null)
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'all') return true
@@ -127,14 +129,26 @@ export default function App() {
     }))
   }
 
-  function markDone(taskId) {
+  function markDone(taskId, doneMemberId) {
     setTasks(prev => prev.map(t => {
       if (t.id !== taskId) return t
+      const isProxy = !t.assignees.includes(doneMemberId)
       const newLog = {
         date: new Date().toISOString(),
-        members: [...t.assignees],
+        member: doneMemberId,
+        isProxy,
       }
-      const logs = [newLog, ...(t.logs || [])].slice(0, 5)
+      const logs = [newLog, ...(t.logs || [])].slice(0, 10)
+      return { ...t, logs }
+    }))
+    setDoneSelectingId(null)
+  }
+
+  function undoLog(taskId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      const logs = [...(t.logs || [])]
+      logs.shift()
       return { ...t, logs }
     }))
   }
@@ -183,7 +197,6 @@ export default function App() {
     const data = e.dataTransfer.getData('text/plain')
 
     if (data.startsWith('member:')) {
-      // Member dropped on card → add assignee
       const memberId = data.replace('member:', '')
       setTasks(prev => prev.map(t => {
         if (t.id !== overTaskId) return t
@@ -191,7 +204,6 @@ export default function App() {
         return { ...t, assignees: [...t.assignees, memberId] }
       }))
     } else if (data.startsWith('card:')) {
-      // Card dropped on card → reorder
       const draggedId = parseInt(data.replace('card:', ''))
       if (draggedId && draggedId !== overTaskId) {
         setTasks(prev => {
@@ -240,6 +252,7 @@ export default function App() {
     const isDragOver = dragState.overId === task.id
     const isMemberDragOver = dragState.dragType === 'member' && dragState.overId === task.id
     const lastLog = (task.logs || [])[0]
+    const isDoneSelecting = doneSelectingId === task.id
 
     return (
       <div
@@ -260,11 +273,17 @@ export default function App() {
             : '1px solid #E8E8E4',
           transition: 'all 0.15s ease',
           position: 'relative',
-          zIndex: isEditing ? 50 : 1,
+          zIndex: isEditing ? 50 : isDoneSelecting ? 40 : 1,
           opacity: isDragging ? 0.5 : 1,
         }}
         className="task-card"
-        onClick={() => setEditingId(isEditing ? null : task.id)}
+        onClick={() => {
+          if (isDoneSelecting) {
+            setDoneSelectingId(null)
+          } else {
+            setEditingId(isEditing ? null : task.id)
+          }
+        }}
       >
         {/* Task Name */}
         <div style={{ fontSize: 15, fontWeight: 600, color: '#37352F', marginBottom: 8 }}>
@@ -337,47 +356,33 @@ export default function App() {
           </div>
         )}
 
-        {/* Rotation order display */}
+        {/* Rotation: simple current assignee + next button (no full list) */}
         {task.type === 'rotation' && task.rotationOrder && (
-          <div style={{ marginBottom: 6, marginTop: 4 }}>
-            <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-              {task.rotationOrder.map((mid, i) => {
-                const isCurrent = i === (task.rotationIndex || 0)
-                const isNext = i === ((task.rotationIndex || 0) + 1) % task.rotationOrder.length
-                return (
-                  <div key={mid} style={{
-                    display: 'flex', alignItems: 'center', gap: 2,
-                  }}>
-                    <div style={{
-                      width: isCurrent ? 24 : 18,
-                      height: isCurrent ? 24 : 18,
-                      borderRadius: '50%',
-                      background: getAvatarColor(mid),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: isCurrent ? 10 : 8, fontWeight: 700, color: '#fff',
-                      border: isCurrent ? '2px solid #37352F' : isNext ? '2px dashed #9B9A97' : '1px solid transparent',
-                      opacity: isCurrent ? 1 : isNext ? 0.8 : 0.4,
-                      transition: 'all 0.15s',
-                    }} title={getMemberName(mid) + (isCurrent ? '（今）' : isNext ? '（次）' : '')}>
-                      {getInitials(getMemberName(mid))}
-                    </div>
-                    {i < task.rotationOrder.length - 1 && (
-                      <span style={{ fontSize: 8, color: '#D1D5DB' }}>→</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+          <div style={{
+            marginTop: 4, marginBottom: 6,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span style={{ fontSize: 11, color: '#9B9A97' }}>次の担当:</span>
+            {(() => {
+              const order = task.rotationOrder
+              const nextIdx = ((task.rotationIndex || 0) + 1) % order.length
+              const nextId = order[nextIdx]
+              return (
+                <span style={{ fontSize: 11, color: '#3B82F6', fontWeight: 600 }}>
+                  {getMemberName(nextId)}
+                </span>
+              )
+            })()}
             <button
               className="filter-btn"
               style={{
-                marginTop: 6, padding: '3px 10px', borderRadius: 4,
+                padding: '2px 10px', borderRadius: 4,
                 fontSize: 11, fontWeight: 600, background: '#3B82F618',
                 color: '#3B82F6', border: 'none',
               }}
               onClick={e => { e.stopPropagation(); rotateNext(task.id) }}
             >
-              🔄 次の人へ
+              次の人へ →
             </button>
           </div>
         )}
@@ -389,7 +394,10 @@ export default function App() {
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
             <span>✅</span>
-            <span>前回: {formatDate(lastLog.date)} {(lastLog.members || [lastLog.member]).map(m => getShortName(m)).join(', ')}</span>
+            <span>
+              前回: {formatDate(lastLog.date)} {getShortName(lastLog.member)}
+              {lastLog.isProxy && <span style={{ color: '#F59E0B', fontWeight: 600 }}>（代行）</span>}
+            </span>
           </div>
         )}
 
@@ -404,8 +412,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Done button */}
-        {task.assignees.length > 0 && !isEditing && (
+        {/* Done button — opens member selector */}
+        {!isEditing && !isDoneSelecting && (
           <button
             className="filter-btn"
             style={{
@@ -414,11 +422,73 @@ export default function App() {
               fontSize: 11, fontWeight: 600,
               background: '#10B98118', color: '#10B981', border: 'none',
             }}
-            onClick={e => { e.stopPropagation(); markDone(task.id) }}
+            onClick={e => {
+              e.stopPropagation()
+              setDoneSelectingId(task.id)
+              setEditingId(null)
+            }}
             title="この雑務を完了する"
           >
             ✓ 完了する
           </button>
+        )}
+
+        {/* Done member selector dropdown */}
+        {isDoneSelecting && (
+          <div
+            style={{
+              position: 'absolute', top: 8, right: 8, zIndex: 20,
+              background: '#fff', border: '1px solid #E8E8E4', borderRadius: 8,
+              padding: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              minWidth: 180,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>
+              誰が対応しましたか？
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {MEMBERS.map(m => {
+                const isAssignee = task.assignees.includes(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    className="filter-btn"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 8px', borderRadius: 4, fontSize: 12,
+                      background: isAssignee ? getAvatarColor(m.id) + '12' : 'transparent',
+                      color: '#37352F', border: 'none', textAlign: 'left',
+                      fontFamily: 'inherit',
+                    }}
+                    onClick={() => markDone(task.id, m.id)}
+                  >
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: getAvatarColor(m.id),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 8, fontWeight: 700, color: '#fff',
+                    }}>
+                      {getInitials(m.name)}
+                    </div>
+                    <span style={{ fontWeight: isAssignee ? 600 : 400 }}>{m.name}</span>
+                    {!isAssignee && <span style={{ fontSize: 10, color: '#F59E0B' }}>代行</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              className="filter-btn"
+              style={{
+                marginTop: 6, padding: '3px 8px', borderRadius: 4,
+                fontSize: 11, color: '#9B9A97', background: '#F7F7F5',
+                border: 'none', width: '100%', fontFamily: 'inherit',
+              }}
+              onClick={() => setDoneSelectingId(null)}
+            >
+              キャンセル
+            </button>
+          </div>
         )}
 
         {/* Edit panel */}
@@ -509,10 +579,10 @@ export default function App() {
               }}
             />
 
-            {/* Logs */}
+            {/* Logs with undo */}
             {task.logs && task.logs.length > 0 && (
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>📋 対応履歴（直近5件）</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>📋 対応履歴（直近10件）</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {task.logs.map((log, i) => (
                     <div key={i} style={{
@@ -523,8 +593,23 @@ export default function App() {
                       <span style={{ color: '#10B981' }}>✅</span>
                       <span>{formatDate(log.date)}</span>
                       <span style={{ fontWeight: 600 }}>
-                        {(log.members || [log.member]).map(m => getShortName(m)).join(', ')}
+                        {getShortName(log.member)}
                       </span>
+                      {log.isProxy && <span style={{ color: '#F59E0B', fontSize: 10, fontWeight: 600 }}>代行</span>}
+                      {i === 0 && (
+                        <button
+                          className="filter-btn"
+                          style={{
+                            marginLeft: 'auto', padding: '1px 6px', borderRadius: 3,
+                            fontSize: 10, color: '#E84855', background: '#E8485512',
+                            border: 'none', fontFamily: 'inherit',
+                          }}
+                          onClick={() => undoLog(task.id)}
+                          title="直近の完了を取り消す"
+                        >
+                          取り消し
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -643,7 +728,7 @@ export default function App() {
         .member-chip:active { cursor: grabbing; }
       `}</style>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }} onClick={() => editingId && setEditingId(null)}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }} onClick={() => { editingId && setEditingId(null); doneSelectingId && setDoneSelectingId(null) }}>
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
