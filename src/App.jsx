@@ -13,8 +13,8 @@ const MEMBERS = [
 const ALL_MEMBER_IDS = MEMBERS.map(m => m.id)
 
 const INITIAL_TASKS = [
-  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignees: ['koga'], rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 2, logs: [], memo: '' },
-  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignees: ['masuno'], rotationOrder: [...ALL_MEMBER_IDS], rotationIndex: 5, logs: [], memo: '' },
+  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignees: ['koga'], rotationOrder: ['koga', 'masuno', 'morioka'], rotationIndex: 0, logs: [], memo: '' },
+  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignees: ['masuno'], rotationOrder: ['fukuda', 'sandou', 'koga', 'takamori', 'morioka', 'masuno', 'sakai'], rotationIndex: 5, logs: [], memo: '' },
   { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignees: [], logs: [], memo: '' },
   { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignees: ['sakai'], logs: [], memo: '' },
   { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignees: ['sandou'], logs: [], memo: '' },
@@ -112,7 +112,7 @@ export default function App() {
       memo: '',
     }
     if (newTask.type === 'rotation') {
-      task.rotationOrder = [...ALL_MEMBER_IDS]
+      task.rotationOrder = []
       task.rotationIndex = 0
     }
     setTasks(prev => [...prev, task])
@@ -150,6 +150,28 @@ export default function App() {
       const logs = [...(t.logs || [])]
       logs.shift()
       return { ...t, logs }
+    }))
+  }
+
+  function toggleRotationMember(taskId, memberId) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId || t.type !== 'rotation') return t
+      const order = t.rotationOrder || []
+      let newOrder
+      if (order.includes(memberId)) {
+        newOrder = order.filter(id => id !== memberId)
+      } else {
+        newOrder = [...order, memberId]
+      }
+      // rotationIndexを安全に保つ
+      let newIdx = t.rotationIndex || 0
+      if (newOrder.length === 0) {
+        return { ...t, rotationOrder: newOrder, rotationIndex: 0, assignees: [] }
+      }
+      if (newIdx >= newOrder.length) {
+        newIdx = 0
+      }
+      return { ...t, rotationOrder: newOrder, rotationIndex: newIdx, assignees: [newOrder[newIdx]] }
     }))
   }
 
@@ -356,23 +378,35 @@ export default function App() {
           </div>
         )}
 
-        {/* Rotation: simple current assignee + next button (no full list) */}
-        {task.type === 'rotation' && task.rotationOrder && (
-          <div style={{
-            marginTop: 4, marginBottom: 6,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <span style={{ fontSize: 11, color: '#9B9A97' }}>次の担当:</span>
-            {(() => {
-              const order = task.rotationOrder
-              const nextIdx = ((task.rotationIndex || 0) + 1) % order.length
-              const nextId = order[nextIdx]
-              return (
-                <span style={{ fontSize: 11, color: '#3B82F6', fontWeight: 600 }}>
-                  {getMemberName(nextId)}
-                </span>
-              )
-            })()}
+        {/* Rotation: show all rotation members with current highlighted + next button */}
+        {task.type === 'rotation' && task.rotationOrder && task.rotationOrder.length > 0 && (
+          <div style={{ marginTop: 4, marginBottom: 6 }}>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+              {task.rotationOrder.map((mid, i) => {
+                const isCurrent = i === (task.rotationIndex || 0)
+                const isNext = i === ((task.rotationIndex || 0) + 1) % task.rotationOrder.length
+                return (
+                  <div key={mid} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <div style={{
+                      width: isCurrent ? 24 : 18,
+                      height: isCurrent ? 24 : 18,
+                      borderRadius: '50%',
+                      background: getAvatarColor(mid),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: isCurrent ? 10 : 8, fontWeight: 700, color: '#fff',
+                      border: isCurrent ? '2px solid #37352F' : isNext ? '2px dashed #9B9A97' : '1px solid transparent',
+                      opacity: isCurrent ? 1 : isNext ? 0.8 : 0.4,
+                      transition: 'all 0.15s',
+                    }} title={getMemberName(mid) + (isCurrent ? '（今）' : isNext ? '（次）' : '')}>
+                      {getInitials(getMemberName(mid))}
+                    </div>
+                    {i < task.rotationOrder.length - 1 && (
+                      <span style={{ fontSize: 8, color: '#D1D5DB' }}>→</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
             <button
               className="filter-btn"
               style={{
@@ -503,44 +537,6 @@ export default function App() {
             }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Assignee checkboxes */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当者（複数選択可）</div>
-            <div style={{
-              display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10,
-              background: '#F7F7F5', borderRadius: 6, padding: '8px 10px',
-            }}>
-              {MEMBERS.map(m => {
-                const isChecked = task.assignees.includes(m.id)
-                return (
-                  <label
-                    key={m.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      cursor: 'pointer', fontSize: 13, padding: '3px 0',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleAssignee(task.id, m.id)}
-                      style={{ accentColor: getAvatarColor(m.id) }}
-                    />
-                    <div style={{
-                      width: 20, height: 20, borderRadius: '50%',
-                      background: getAvatarColor(m.id),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, fontWeight: 700, color: '#fff',
-                    }}>
-                      {getInitials(m.name)}
-                    </div>
-                    <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? '#37352F' : '#9B9A97' }}>
-                      {m.name}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-
             {/* Type select */}
             <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当タイプ</div>
             <select
@@ -548,9 +544,8 @@ export default function App() {
               onChange={e => {
                 const changes = { type: e.target.value }
                 if (e.target.value === 'rotation' && !task.rotationOrder) {
-                  changes.rotationOrder = [...ALL_MEMBER_IDS]
-                  changes.rotationIndex = task.assignees[0] ? ALL_MEMBER_IDS.indexOf(task.assignees[0]) : 0
-                  if (changes.rotationIndex === -1) changes.rotationIndex = 0
+                  changes.rotationOrder = [...task.assignees]
+                  changes.rotationIndex = 0
                 }
                 updateTask(task.id, changes)
               }}
@@ -564,6 +559,91 @@ export default function App() {
                 <option key={key} value={key}>{conf.emoji} {conf.label}</option>
               ))}
             </select>
+
+            {/* Rotation members (only for rotation type) */}
+            {task.type === 'rotation' && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>🔄 ローテーション対象メンバー</div>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10,
+                  background: '#EFF6FF', borderRadius: 6, padding: '8px 10px',
+                  border: '1px solid #3B82F620',
+                }}>
+                  {MEMBERS.map(m => {
+                    const isInRotation = (task.rotationOrder || []).includes(m.id)
+                    return (
+                      <label
+                        key={m.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          cursor: 'pointer', fontSize: 13, padding: '3px 0',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isInRotation}
+                          onChange={() => toggleRotationMember(task.id, m.id)}
+                          style={{ accentColor: '#3B82F6' }}
+                        />
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: getAvatarColor(m.id),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, fontWeight: 700, color: '#fff',
+                        }}>
+                          {getInitials(m.name)}
+                        </div>
+                        <span style={{ fontWeight: isInRotation ? 600 : 400, color: isInRotation ? '#37352F' : '#9B9A97' }}>
+                          {m.name}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Assignee checkboxes (for non-rotation types) */}
+            {task.type !== 'rotation' && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>担当者（複数選択可）</div>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10,
+                  background: '#F7F7F5', borderRadius: 6, padding: '8px 10px',
+                }}>
+                  {MEMBERS.map(m => {
+                    const isChecked = task.assignees.includes(m.id)
+                    return (
+                      <label
+                        key={m.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          cursor: 'pointer', fontSize: 13, padding: '3px 0',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleAssignee(task.id, m.id)}
+                          style={{ accentColor: getAvatarColor(m.id) }}
+                        />
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: getAvatarColor(m.id),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, fontWeight: 700, color: '#fff',
+                        }}>
+                          {getInitials(m.name)}
+                        </div>
+                        <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? '#37352F' : '#9B9A97' }}>
+                          {m.name}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
+            )}
 
             {/* Memo */}
             <div style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', marginBottom: 6 }}>📝 メモ</div>
