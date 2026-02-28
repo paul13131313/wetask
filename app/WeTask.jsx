@@ -1,4 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+'use client'
+
+import { useState, useEffect } from 'react'
 
 const INITIAL_MEMBERS = [
   { id: 'fukuda', name: '福田将己', role: '代表取締役' },
@@ -52,6 +54,7 @@ function formatDate(dateStr) {
 }
 
 function loadFromStorage(key, fallback) {
+  if (typeof window === 'undefined') return fallback
   try {
     const saved = localStorage.getItem(`wetask_${key}`)
     if (saved) return JSON.parse(saved)
