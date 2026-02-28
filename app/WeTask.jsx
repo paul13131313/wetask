@@ -60,14 +60,21 @@ export default function App() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
   const [newMember, setNewMember] = useState({ name: '', role: '' })
+  const [thanksCards, setThanksCards] = useState([])
+  const [showThanksModal, setShowThanksModal] = useState(null) // { taskId, taskName, from, to }
+  const [thanksMessage, setThanksMessage] = useState('')
+  const [showThanksHistory, setShowThanksHistory] = useState(false)
 
   // サーバーからデータ読み込み
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(res => res.json())
-      .then(data => {
-        setMembers(data.members)
-        setTasks(data.tasks)
+    Promise.all([
+      fetch('/api/tasks').then(res => res.json()),
+      fetch('/api/thanks').then(res => res.json()),
+    ])
+      .then(([taskData, thanksData]) => {
+        setMembers(taskData.members)
+        setTasks(taskData.tasks)
+        setThanksCards(thanksData.thanks || [])
         setLoading(false)
       })
       .catch(err => {
@@ -159,9 +166,11 @@ export default function App() {
   }
 
   function markDone(taskId, doneMemberId) {
+    const task = tasks.find(t => t.id === taskId)
+    const isProxy = task ? !task.assignees.includes(doneMemberId) : false
+
     setTasks(prev => prev.map(t => {
       if (t.id !== taskId) return t
-      const isProxy = !t.assignees.includes(doneMemberId)
       const newLog = {
         date: new Date().toISOString(),
         member: doneMemberId,
@@ -171,6 +180,21 @@ export default function App() {
       return { ...t, logs }
     }))
     setDoneSelectingId(null)
+
+    // Chatwork通知（バックグラウンド）
+    const memberName = getMemberName(doneMemberId) || doneMemberId
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'task_done',
+        data: {
+          taskName: task?.name || '',
+          memberName,
+          isProxy,
+        },
+      }),
+    }).catch(err => console.error('通知エラー:', err))
   }
 
   function undoLog(taskId) {
@@ -180,6 +204,46 @@ export default function App() {
       logs.shift()
       return { ...t, logs }
     }))
+  }
+
+  function sendThanks(taskId, taskName, fromId, toId, message) {
+    const fromName = getMemberName(fromId) || fromId
+    const toName = getMemberName(toId) || toId
+
+    // サーバーに保存
+    fetch('/api/thanks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId, taskName, from: fromId, to: toId, message }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.card) {
+          setThanksCards(prev => [data.card, ...prev])
+        }
+      })
+      .catch(err => console.error('THANKS保存エラー:', err))
+
+    // Chatwork通知
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'thanks',
+        data: { taskName, fromName, toName, message },
+      }),
+    }).catch(err => console.error('通知エラー:', err))
+
+    setShowThanksModal(null)
+    setThanksMessage('')
+  }
+
+  // 特定のログに対してTHANKSが既に送られているかチェック
+  function hasThanks(taskId, toMemberId, logDate) {
+    return thanksCards.some(c =>
+      c.taskId === taskId && c.to === toMemberId &&
+      Math.abs(new Date(c.date).getTime() - new Date(logDate).getTime()) < 86400000
+    )
   }
 
   function toggleRotationMember(taskId, memberId) {
@@ -454,13 +518,37 @@ export default function App() {
         {lastLog && (
           <div style={{
             fontSize: 11, color: '#9B9A97', marginTop: 4,
-            display: 'flex', alignItems: 'center', gap: 4,
+            display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
           }}>
             <span>✅</span>
             <span>
               前回: {formatDate(lastLog.date)} {getShortName(lastLog.member)}
               {lastLog.isProxy && <span style={{ color: '#F59E0B', fontWeight: 600 }}>（代行）</span>}
             </span>
+            {lastLog.isProxy && !hasThanks(task.id, lastLog.member, lastLog.date) && (
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '1px 6px', borderRadius: 3,
+                  fontSize: 10, color: '#EC4899', background: '#EC489912',
+                  border: 'none', fontFamily: 'inherit',
+                }}
+                onClick={e => {
+                  e.stopPropagation()
+                  setShowThanksModal({
+                    taskId: task.id,
+                    taskName: task.name,
+                    from: task.assignees[0] || '',
+                    to: lastLog.member,
+                  })
+                }}
+              >
+                💐 THANKS
+              </button>
+            )}
+            {lastLog.isProxy && hasThanks(task.id, lastLog.member, lastLog.date) && (
+              <span style={{ fontSize: 10, color: '#EC4899', fontWeight: 500 }}>💐</span>
+            )}
           </div>
         )}
 
@@ -705,6 +793,28 @@ export default function App() {
                         {getShortName(log.member)}
                       </span>
                       {log.isProxy && <span style={{ color: '#F59E0B', fontSize: 10, fontWeight: 600 }}>代行</span>}
+                      {log.isProxy && !hasThanks(task.id, log.member, log.date) && (
+                        <button
+                          className="filter-btn"
+                          style={{
+                            padding: '1px 6px', borderRadius: 3,
+                            fontSize: 10, color: '#EC4899', background: '#EC489912',
+                            border: 'none', fontFamily: 'inherit',
+                          }}
+                          onClick={() => setShowThanksModal({
+                            taskId: task.id,
+                            taskName: task.name,
+                            from: task.assignees[0] || '',
+                            to: log.member,
+                          })}
+                          title="代行してくれた人にお礼を送る"
+                        >
+                          💐 THANKS
+                        </button>
+                      )}
+                      {log.isProxy && hasThanks(task.id, log.member, log.date) && (
+                        <span style={{ fontSize: 10, color: '#EC4899', fontWeight: 500 }}>💐 感謝済</span>
+                      )}
                       {i === 0 && (
                         <button
                           className="filter-btn"
@@ -858,7 +968,21 @@ export default function App() {
             <span style={{ fontSize: 28 }}>🧹</span>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: '#37352F' }}>We TASK</h1>
           </div>
-          <p style={{ fontSize: 14, color: '#9B9A97' }}>チームの雑務を見える化するボード</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <p style={{ fontSize: 14, color: '#9B9A97' }}>チームの雑務を見える化するボード</p>
+            {thanksCards.length > 0 && (
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '3px 10px', borderRadius: 14, fontSize: 12, fontWeight: 500,
+                  background: '#FDF2F8', color: '#EC4899', border: '1px solid #F9A8D4',
+                }}
+                onClick={() => setShowThanksHistory(true)}
+              >
+                💐 THANKS ({thanksCards.length})
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Member Summary — draggable avatars */}
@@ -1201,6 +1325,163 @@ export default function App() {
                 disabled={!newMember.name.trim()}
               >
                 追加する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Thanks Modal */}
+      {showThanksModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}
+          onClick={() => { setShowThanksModal(null); setThanksMessage('') }}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 400,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: '#37352F' }}>
+              💐 THANKSカード
+            </h2>
+            <p style={{ fontSize: 13, color: '#9B9A97', marginBottom: 16 }}>
+              「{showThanksModal.taskName}」を代行してくれた{getMemberName(showThanksModal.to)}さんにお礼を送ります
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', display: 'block', marginBottom: 4 }}>
+                メッセージ（任意）
+              </label>
+              <textarea
+                value={thanksMessage}
+                onChange={e => setThanksMessage(e.target.value)}
+                placeholder="ありがとう！助かりました！"
+                style={{
+                  width: '100%', padding: '8px 12px', fontSize: 13,
+                  border: '1px solid #E8E8E4', borderRadius: 6, fontFamily: 'inherit',
+                  resize: 'vertical', minHeight: 60,
+                }}
+                autoFocus
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+                  background: '#F0F0EE', color: '#37352F', border: 'none',
+                }}
+                onClick={() => { setShowThanksModal(null); setThanksMessage('') }}
+              >
+                キャンセル
+              </button>
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                  background: '#EC4899', color: '#fff', border: 'none',
+                }}
+                onClick={() => sendThanks(
+                  showThanksModal.taskId,
+                  showThanksModal.taskName,
+                  showThanksModal.from,
+                  showThanksModal.to,
+                  thanksMessage
+                )}
+              >
+                💐 送る
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thanks History Modal */}
+      {showThanksHistory && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}
+          onClick={() => setShowThanksHistory(false)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 500,
+              maxHeight: '80vh', overflowY: 'auto',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: '#37352F' }}>
+              💐 THANKSカード履歴
+            </h2>
+            {thanksCards.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: '#9B9A97', fontSize: 14 }}>
+                まだTHANKSカードはありません
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {thanksCards.map(card => (
+                  <div key={card.id} style={{
+                    padding: '12px 14px', borderRadius: 8,
+                    background: 'linear-gradient(135deg, #FDF2F8, #FCE7F3)',
+                    border: '1px solid #F9A8D4',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: '50%',
+                        background: getAvatarColor(card.from),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 8, fontWeight: 700, color: '#fff',
+                      }}>
+                        {getInitials(getMemberName(card.from))}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#37352F' }}>
+                        {getMemberName(card.from) || card.from}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#9B9A97' }}>→</span>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: '50%',
+                        background: getAvatarColor(card.to),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 8, fontWeight: 700, color: '#fff',
+                      }}>
+                        {getInitials(getMemberName(card.to))}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#37352F' }}>
+                        {getMemberName(card.to) || card.to}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>
+                      📋 {card.taskName}
+                    </div>
+                    {card.message && (
+                      <div style={{ fontSize: 12, color: '#37352F', fontStyle: 'italic', marginTop: 4 }}>
+                        💬 {card.message}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: '#9B9A97', marginTop: 4 }}>
+                      {formatDate(card.date)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <button
+                className="filter-btn"
+                style={{
+                  padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+                  background: '#F0F0EE', color: '#37352F', border: 'none',
+                }}
+                onClick={() => setShowThanksHistory(false)}
+              >
+                閉じる
               </button>
             </div>
           </div>
