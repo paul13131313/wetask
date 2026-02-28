@@ -28,7 +28,7 @@ function formatDate(dateStr) {
 }
 
 // サーバーへの保存（デバウンス付き）
-function useSaveToServer(members, tasks) {
+function useSaveToServer(members, tasks, skipSave) {
   const timeoutRef = useRef(null)
   const isInitialLoad = useRef(true)
 
@@ -37,6 +37,7 @@ function useSaveToServer(members, tasks) {
       isInitialLoad.current = false
       return
     }
+    if (skipSave) return
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
       fetch('/api/tasks', {
@@ -46,7 +47,7 @@ function useSaveToServer(members, tasks) {
       }).catch(err => console.error('保存エラー:', err))
     }, 500)
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
-  }, [members, tasks])
+  }, [members, tasks, skipSave])
 }
 
 export default function App() {
@@ -65,6 +66,166 @@ export default function App() {
   const [thanksMessage, setThanksMessage] = useState('')
   const [thanksFrom, setThanksFrom] = useState('')
   const [showThanksHistory, setShowThanksHistory] = useState(false)
+  const [isTutorial, setIsTutorial] = useState(false)
+  const [tutorialStep, setTutorialStep] = useState(0)
+  const [tutorialHighlight, setTutorialHighlight] = useState(null)
+
+  const TUTORIAL_STEPS = [
+    {
+      id: 'welcome',
+      target: null,
+      title: 'We TASKへようこそ！',
+      body: 'チームの雑務を見える化して管理するボードです。\n使い方を一緒に見ていきましょう！',
+      position: 'center',
+      interactive: false,
+    },
+    {
+      id: 'task-grid',
+      target: '[data-tutorial="task-grid"]',
+      title: 'タスクボード',
+      body: 'チームの雑務がカードで一覧表示されます。\n📌固定担当・🔄ローテーション・🤝フレキシブルの3タイプがあります。',
+      position: 'top',
+      interactive: false,
+    },
+    {
+      id: 'task-card',
+      target: '[data-tutorial="task-card-first"]',
+      title: 'タスクカード',
+      body: '各カードには雑務名、頻度、担当タイプ、担当者が表示されます。\nカードをクリックすると編集できます。',
+      position: 'right',
+      interactive: false,
+    },
+    {
+      id: 'done-button',
+      target: '[data-tutorial="done-button-first"]',
+      title: '完了ボタン ✅',
+      body: '雑務が終わったら「✓ 完了する」をタップ！\n実際にタップしてみましょう。',
+      position: 'left',
+      interactive: true,
+    },
+    {
+      id: 'done-selector',
+      target: '[data-tutorial="done-selector"]',
+      title: '誰が対応した？',
+      body: '対応した人を選びます。\n担当者以外が対応した場合は「代行」として記録され、THANKSカードを送れるようになります。',
+      position: 'left',
+      interactive: false,
+    },
+    {
+      id: 'member-bar',
+      target: '[data-tutorial="member-bar"]',
+      title: 'メンバーバー',
+      body: 'メンバーのアバターをカードにドラッグ＆ドロップで担当を追加！\nクリックするとそのメンバーのタスクだけ表示されます。',
+      position: 'bottom',
+      interactive: false,
+    },
+    {
+      id: 'add-task',
+      target: '[data-tutorial="add-task-btn"]',
+      title: '雑務を追加 ＋',
+      body: 'ここから新しい雑務を登録できます。\n雑務名、頻度、担当タイプを設定して追加しましょう。',
+      position: 'bottom',
+      interactive: false,
+    },
+    {
+      id: 'view-toggle',
+      target: '[data-tutorial="view-toggle"]',
+      title: 'ビュー切替',
+      body: '「ボード」で全体を一覧表示。\n「メンバー別」で担当者ごとにまとめて表示できます。',
+      position: 'bottom',
+      interactive: false,
+    },
+    {
+      id: 'finish',
+      target: null,
+      title: 'チュートリアル完了！ 🎉',
+      body: 'これでWe TASKの基本操作はバッチリです！\nさっそくチームの雑務を管理してみましょう。',
+      position: 'center',
+      interactive: false,
+    },
+  ]
+
+  function startTutorial() {
+    setIsTutorial(true)
+    setTutorialStep(0)
+    setTutorialHighlight(null)
+    setEditingId(null)
+    setDoneSelectingId(null)
+    setFilter('all')
+    setView('board')
+  }
+
+  function endTutorial() {
+    setIsTutorial(false)
+    setTutorialStep(0)
+    setTutorialHighlight(null)
+    setDoneSelectingId(null)
+    setEditingId(null)
+  }
+
+  function updateHighlight(step) {
+    if (!step || !step.target) {
+      setTutorialHighlight(null)
+      return
+    }
+    const el = document.querySelector(step.target)
+    if (!el) {
+      setTutorialHighlight(null)
+      return
+    }
+    const rect = el.getBoundingClientRect()
+    const padding = 8
+    setTutorialHighlight({
+      top: rect.top - padding,
+      left: rect.left - padding,
+      width: rect.width + padding * 2,
+      height: rect.height + padding * 2,
+    })
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  function getTutorialTooltipStyle(position, hl) {
+    if (position === 'center' || !hl) {
+      return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+    }
+    const gap = 16
+    switch (position) {
+      case 'top':
+        return { bottom: window.innerHeight - hl.top + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
+      case 'bottom':
+        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
+      case 'left':
+        return { top: Math.max(16, hl.top + hl.height / 2), right: window.innerWidth - hl.left + gap, transform: 'translateY(-50%)' }
+      case 'right':
+        return { top: Math.max(16, hl.top + hl.height / 2), left: hl.left + hl.width + gap, transform: 'translateY(-50%)' }
+      default:
+        return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+    }
+  }
+
+  // チュートリアルステップ変更時にスポットライト位置を更新
+  useEffect(() => {
+    if (!isTutorial) return
+    const step = TUTORIAL_STEPS[tutorialStep]
+    // 少し遅延させてDOM更新を待つ
+    const timer = setTimeout(() => updateHighlight(step), 100)
+    return () => clearTimeout(timer)
+  }, [isTutorial, tutorialStep])
+
+  // リサイズ・スクロール時にスポットライト位置を再計算
+  useEffect(() => {
+    if (!isTutorial) return
+    function handleReposition() {
+      const step = TUTORIAL_STEPS[tutorialStep]
+      updateHighlight(step)
+    }
+    window.addEventListener('resize', handleReposition)
+    window.addEventListener('scroll', handleReposition)
+    return () => {
+      window.removeEventListener('resize', handleReposition)
+      window.removeEventListener('scroll', handleReposition)
+    }
+  }, [isTutorial, tutorialStep])
 
   // サーバーからデータ読み込み
   useEffect(() => {
@@ -84,12 +245,21 @@ export default function App() {
       })
   }, [])
 
-  // 変更時にサーバーへ自動保存（500msデバウンス）
-  useSaveToServer(members, tasks)
+  // 変更時にサーバーへ自動保存（500msデバウンス、チュートリアル中はスキップ）
+  useSaveToServer(members, tasks, isTutorial)
 
   const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
   const [doneSelectingId, setDoneSelectingId] = useState(null)
+
+  // インタラクティブステップ：完了ボタンが押されたら自動で次へ
+  useEffect(() => {
+    if (!isTutorial) return
+    const step = TUTORIAL_STEPS[tutorialStep]
+    if (step?.id === 'done-button' && doneSelectingId) {
+      setTutorialStep(prev => prev + 1)
+    }
+  }, [doneSelectingId, isTutorial, tutorialStep])
 
   // Helper functions using members state
   function getMemberName(id) {
@@ -167,6 +337,12 @@ export default function App() {
   }
 
   function markDone(taskId, doneMemberId) {
+    // チュートリアル中はデータを変更せずUIだけ閉じる
+    if (isTutorial) {
+      setDoneSelectingId(null)
+      return
+    }
+
     const task = tasks.find(t => t.id === taskId)
     const isProxy = task ? !task.assignees.includes(doneMemberId) : false
 
@@ -182,20 +358,22 @@ export default function App() {
     }))
     setDoneSelectingId(null)
 
-    // Chatwork通知（バックグラウンド）
-    const memberName = getMemberName(doneMemberId) || doneMemberId
-    fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'task_done',
-        data: {
-          taskName: task?.name || '',
-          memberName,
-          isProxy,
-        },
-      }),
-    }).catch(err => console.error('通知エラー:', err))
+    // Chatwork通知（バックグラウンド、チュートリアル中はスキップ）
+    if (!isTutorial) {
+      const memberName = getMemberName(doneMemberId) || doneMemberId
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'task_done',
+          data: {
+            taskName: task?.name || '',
+            memberName,
+            isProxy,
+          },
+        }),
+      }).catch(err => console.error('通知エラー:', err))
+    }
   }
 
   function undoLog(taskId) {
@@ -211,29 +389,32 @@ export default function App() {
     const fromName = getMemberName(fromId) || fromId
     const toName = getMemberName(toId) || toId
 
-    // サーバーに保存
-    fetch('/api/thanks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ taskId, taskName, from: fromId, to: toId, message }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.card) {
-          setThanksCards(prev => [data.card, ...prev])
-        }
+    // チュートリアル中はAPI呼び出しをスキップ
+    if (!isTutorial) {
+      // サーバーに保存
+      fetch('/api/thanks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, taskName, from: fromId, to: toId, message }),
       })
-      .catch(err => console.error('THANKS保存エラー:', err))
+        .then(res => res.json())
+        .then(data => {
+          if (data.card) {
+            setThanksCards(prev => [data.card, ...prev])
+          }
+        })
+        .catch(err => console.error('THANKS保存エラー:', err))
 
-    // Chatwork通知
-    fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'thanks',
-        data: { taskName, fromName, toName, message },
-      }),
-    }).catch(err => console.error('通知エラー:', err))
+      // Chatwork通知
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'thanks',
+          data: { taskName, fromName, toName, message },
+        }),
+      }).catch(err => console.error('通知エラー:', err))
+    }
 
     setShowThanksModal(null)
     setThanksMessage('')
@@ -362,7 +543,7 @@ export default function App() {
     setMemberDragOver(null)
   }
 
-  function renderTaskCard(task) {
+  function renderTaskCard(task, index) {
     const typeConf = TYPE_CONFIG[task.type]
     const isEditing = editingId === task.id
     const isDragging = dragState.dragType === 'card' && dragState.draggingId === task.id
@@ -370,6 +551,7 @@ export default function App() {
     const isMemberDragOver = dragState.dragType === 'member' && dragState.overId === task.id
     const lastLog = (task.logs || [])[0]
     const isDoneSelecting = doneSelectingId === task.id
+    const isFirstCard = isTutorial && index === 0
 
     return (
       <div
@@ -379,6 +561,7 @@ export default function App() {
         onDragOver={e => handleCardDragOver(e, task.id)}
         onDrop={e => handleCardDrop(e, task.id)}
         onDragEnd={handleDragEnd}
+        data-tutorial={isFirstCard ? 'task-card-first' : undefined}
         style={{
           background: isMemberDragOver ? '#EFF6FF' : '#fff',
           borderRadius: 8,
@@ -569,6 +752,7 @@ export default function App() {
         {!isEditing && !isDoneSelecting && (
           <button
             className="filter-btn"
+            data-tutorial={isFirstCard ? 'done-button-first' : undefined}
             style={{
               position: 'absolute', top: 12, right: 12,
               padding: '3px 8px', borderRadius: 4,
@@ -589,6 +773,7 @@ export default function App() {
         {/* Done member selector dropdown */}
         {isDoneSelecting && (
           <div
+            data-tutorial={isFirstCard ? 'done-selector' : undefined}
             style={{
               position: 'absolute', top: 8, right: 8, zIndex: 20,
               background: '#fff', border: '1px solid #E8E8E4', borderRadius: 8,
@@ -963,6 +1148,30 @@ export default function App() {
         [draggable=true] { user-select: none; }
         .member-chip { cursor: grab; user-select: none; }
         .member-chip:active { cursor: grabbing; }
+        .tutorial-spotlight {
+          position: fixed;
+          border-radius: 8px;
+          box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+          z-index: 200;
+          pointer-events: none;
+          transition: all 0.3s ease;
+        }
+        .tutorial-tooltip {
+          position: fixed;
+          z-index: 201;
+          pointer-events: auto;
+          background: #fff;
+          border-radius: 12px;
+          padding: 20px 24px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+          max-width: 320px;
+          width: calc(100vw - 32px);
+          animation: tutorialFadeIn 0.3s ease;
+        }
+        @keyframes tutorialFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' }} onClick={() => { editingId && setEditingId(null); doneSelectingId && setDoneSelectingId(null) }}>
@@ -972,8 +1181,18 @@ export default function App() {
             <span style={{ fontSize: 28 }}>🧹</span>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: '#37352F' }}>We TASK</h1>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <p style={{ fontSize: 14, color: '#9B9A97' }}>チームの雑務を見える化するボード</p>
+            <button
+              className="filter-btn"
+              style={{
+                padding: '3px 10px', borderRadius: 14, fontSize: 12, fontWeight: 500,
+                background: '#EFF6FF', color: '#3B82F6', border: '1px solid #93C5FD',
+              }}
+              onClick={startTutorial}
+            >
+              ❓ 使い方
+            </button>
             {thanksCards.length > 0 && (
               <button
                 className="filter-btn"
@@ -990,7 +1209,7 @@ export default function App() {
         </div>
 
         {/* Member Summary — draggable avatars */}
-        <div style={{
+        <div data-tutorial="member-bar" style={{
           display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20,
           padding: '14px 16px', background: '#fff', borderRadius: 8, border: '1px solid #E8E8E4',
         }}>
@@ -1087,7 +1306,7 @@ export default function App() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           marginBottom: 18, flexWrap: 'wrap', gap: 10,
         }}>
-          <div style={{ display: 'flex', gap: 4, background: '#fff', borderRadius: 8, padding: 3, border: '1px solid #E8E8E4' }}>
+          <div data-tutorial="view-toggle" style={{ display: 'flex', gap: 4, background: '#fff', borderRadius: 8, padding: 3, border: '1px solid #E8E8E4' }}>
             <button
               className="filter-btn"
               style={{
@@ -1136,6 +1355,7 @@ export default function App() {
             </div>
             <button
               className="filter-btn"
+              data-tutorial="add-task-btn"
               style={{
                 padding: '6px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
                 background: '#E84855', color: '#fff', border: 'none',
@@ -1149,12 +1369,12 @@ export default function App() {
 
         {/* Task Grid */}
         {view === 'board' ? (
-          <div style={{
+          <div data-tutorial="task-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: 12,
           }}>
-            {filteredTasks.map(renderTaskCard)}
+            {filteredTasks.map((t, i) => renderTaskCard(t, i))}
           </div>
         ) : (
           renderMemberView()
@@ -1543,6 +1763,105 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Tutorial Overlay */}
+      {isTutorial && (() => {
+        const step = TUTORIAL_STEPS[tutorialStep]
+        if (!step) return null
+        const isCenter = step.position === 'center' || !tutorialHighlight
+        const tooltipStyle = getTutorialTooltipStyle(step.position, tutorialHighlight)
+        const isLast = tutorialStep === TUTORIAL_STEPS.length - 1
+
+        return (
+          <>
+            {/* Dark overlay for center steps */}
+            {isCenter && (
+              <div style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+                zIndex: 200,
+              }} />
+            )}
+
+            {/* Spotlight hole for targeted steps */}
+            {tutorialHighlight && (
+              <div
+                className="tutorial-spotlight"
+                style={{
+                  top: tutorialHighlight.top,
+                  left: tutorialHighlight.left,
+                  width: tutorialHighlight.width,
+                  height: tutorialHighlight.height,
+                }}
+              />
+            )}
+
+            {/* Interactive click-through zone */}
+            {step.interactive && tutorialHighlight && (
+              <div style={{
+                position: 'fixed',
+                top: tutorialHighlight.top,
+                left: tutorialHighlight.left,
+                width: tutorialHighlight.width,
+                height: tutorialHighlight.height,
+                zIndex: 201,
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                borderRadius: 8,
+              }} />
+            )}
+
+            {/* Tooltip */}
+            <div className="tutorial-tooltip" style={tooltipStyle}>
+              <div style={{ fontSize: 11, color: '#9B9A97', marginBottom: 4 }}>
+                {tutorialStep + 1} / {TUTORIAL_STEPS.length}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#37352F', marginBottom: 8 }}>
+                {step.title}
+              </div>
+              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 16 }}>
+                {step.body}
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                <button
+                  className="filter-btn"
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                    background: '#F0F0EE', color: '#9B9A97', border: 'none',
+                  }}
+                  onClick={endTutorial}
+                >
+                  スキップ
+                </button>
+                {!step.interactive ? (
+                  <button
+                    className="filter-btn"
+                    style={{
+                      padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                      background: '#3B82F6', color: '#fff', border: 'none',
+                    }}
+                    onClick={() => {
+                      if (isLast) {
+                        endTutorial()
+                      } else {
+                        if (TUTORIAL_STEPS[tutorialStep]?.id === 'done-selector') {
+                          setDoneSelectingId(null)
+                        }
+                        setTutorialStep(prev => prev + 1)
+                      }
+                    }}
+                  >
+                    {isLast ? '始める！' : '次へ →'}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 11, color: '#3B82F6', fontWeight: 500 }}>
+                    ↑ タップしてみよう
+                  </span>
+                )}
+              </div>
+            </div>
+          </>
+        )
+      })()}
     </>
   )
 }
