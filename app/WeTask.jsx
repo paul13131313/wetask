@@ -1,33 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-
-const INITIAL_MEMBERS = [
-  { id: 'fukuda', name: '福田将己', role: '代表取締役' },
-  { id: 'sandou', name: 'サンドウ タカユキ', role: '取締役' },
-  { id: 'koga', name: '古賀光紗', role: 'モーション' },
-  { id: 'takamori', name: '高森奈央子', role: 'モーション・デザイン' },
-  { id: 'morioka', name: '森岡夏実', role: 'モーション・デザイン' },
-  { id: 'masuno', name: '増野雄亮', role: 'モーション' },
-  { id: 'sakai', name: '酒井沙貴', role: 'PM' },
-]
-
-const INITIAL_TASKS = [
-  { id: 1, name: 'オフィスの掃除', frequency: '週1', type: 'rotation', assignees: ['koga'], rotationOrder: ['koga', 'masuno', 'morioka'], rotationIndex: 0, logs: [], memo: '' },
-  { id: 2, name: 'トイレ掃除', frequency: '週1', type: 'rotation', assignees: ['masuno'], rotationOrder: ['fukuda', 'sandou', 'koga', 'takamori', 'morioka', 'masuno', 'sakai'], rotationIndex: 5, logs: [], memo: '' },
-  { id: 3, name: 'オフィスのゴミ捨て', frequency: '不定期', type: 'flexible', assignees: [], logs: [], memo: '' },
-  { id: 4, name: '月曜定例管理', frequency: '週1', type: 'fixed', assignees: ['sakai'], logs: [], memo: '' },
-  { id: 5, name: 'イベント場所探し', frequency: '不定期', type: 'fixed', assignees: ['sandou'], logs: [], memo: '' },
-  { id: 6, name: '備品購入', frequency: '不定期', type: 'fixed', assignees: ['takamori'], logs: [], memo: '' },
-  { id: 7, name: '郵便物の管理', frequency: '不定期', type: 'flexible', assignees: [], logs: [], memo: '' },
-  { id: 8, name: 'PC・ソフトのアカウント管理', frequency: '不定期', type: 'fixed', assignees: ['fukuda'], logs: [], memo: '' },
-  { id: 9, name: '契約書管理', frequency: '不定期', type: 'fixed', assignees: ['sakai'], logs: [], memo: '' },
-  { id: 10, name: 'セキュリティ管理', frequency: '不定期', type: 'fixed', assignees: ['fukuda'], logs: [], memo: '' },
-  { id: 11, name: 'プラグイン・ストレージ管理', frequency: '不定期', type: 'fixed', assignees: ['morioka'], logs: [], memo: '' },
-  { id: 12, name: 'NAS整理', frequency: '月1', type: 'fixed', assignees: ['masuno'], logs: [], memo: '' },
-  { id: 13, name: 'We Share Comp整理', frequency: '月1', type: 'fixed', assignees: ['takamori'], logs: [], memo: '' },
-  { id: 14, name: 'HP整理', frequency: '月1', type: 'fixed', assignees: ['sandou'], logs: [], memo: '' },
-]
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { INITIAL_MEMBERS, INITIAL_TASKS } from '@/lib/initialData'
 
 const TYPE_CONFIG = {
   fixed: { label: '固定担当', emoji: '📌', color: '#E84855' },
@@ -53,28 +27,32 @@ function formatDate(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function loadFromStorage(key, fallback) {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const saved = localStorage.getItem(`wetask_${key}`)
-    if (saved) return JSON.parse(saved)
-  } catch (e) {
-    console.error(`localStorage読み込みエラー (${key}):`, e)
-  }
-  return fallback
-}
+// サーバーへの保存（デバウンス付き）
+function useSaveToServer(members, tasks) {
+  const timeoutRef = useRef(null)
+  const isInitialLoad = useRef(true)
 
-function saveToStorage(key, value) {
-  try {
-    localStorage.setItem(`wetask_${key}`, JSON.stringify(value))
-  } catch (e) {
-    console.error(`localStorage保存エラー (${key}):`, e)
-  }
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false
+      return
+    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks, members }),
+      }).catch(err => console.error('保存エラー:', err))
+    }, 500)
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
+  }, [members, tasks])
 }
 
 export default function App() {
-  const [members, setMembers] = useState(() => loadFromStorage('members', INITIAL_MEMBERS))
-  const [tasks, setTasks] = useState(() => loadFromStorage('tasks', INITIAL_TASKS))
+  const [members, setMembers] = useState(INITIAL_MEMBERS)
+  const [tasks, setTasks] = useState(INITIAL_TASKS)
+  const [loading, setLoading] = useState(true)
   const [view, setView] = useState('board')
   const [filter, setFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
@@ -83,9 +61,23 @@ export default function App() {
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
   const [newMember, setNewMember] = useState({ name: '', role: '' })
 
-  // localStorageへ自動保存
-  useEffect(() => { saveToStorage('members', members) }, [members])
-  useEffect(() => { saveToStorage('tasks', tasks) }, [tasks])
+  // サーバーからデータ読み込み
+  useEffect(() => {
+    fetch('/api/tasks')
+      .then(res => res.json())
+      .then(data => {
+        setMembers(data.members)
+        setTasks(data.tasks)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('読み込みエラー:', err)
+        setLoading(false)
+      })
+  }, [])
+
+  // 変更時にサーバーへ自動保存（500msデバウンス）
+  useSaveToServer(members, tasks)
 
   const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
@@ -826,6 +818,20 @@ export default function App() {
             </div>
           )
         })()}
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', fontFamily: 'sans-serif', color: '#9B9A97',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🧹</div>
+          <div>読み込み中...</div>
+        </div>
       </div>
     )
   }

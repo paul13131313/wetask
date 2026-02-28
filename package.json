@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@upstash/redis": "^1.36.3",
     "next": "^15.3.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
