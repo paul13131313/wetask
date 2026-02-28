@@ -189,26 +189,37 @@ export default function App() {
       return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
     }
     const gap = 16
-    const tooltipW = 320
+    const margin = 16
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const tw = Math.min(320, vw - margin * 2)
+
+    // 横位置を画面内にクランプするヘルパー
+    function clampLeft(centerX) {
+      const idealLeft = centerX - tw / 2
+      return Math.max(margin, Math.min(idealLeft, vw - tw - margin))
+    }
+
+    // 縦位置を画面内にクランプするヘルパー
+    function clampTop(centerY) {
+      return Math.max(margin, Math.min(centerY, vh - 250))
+    }
+
     switch (position) {
       case 'top':
-        return { bottom: window.innerHeight - hl.top + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
+        return { bottom: vh - hl.top + gap, left: clampLeft(hl.left + hl.width / 2) }
       case 'bottom':
-        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
-      case 'left': {
-        const spaceLeft = hl.left - gap
-        if (spaceLeft >= tooltipW) {
-          return { top: Math.max(16, hl.top + hl.height / 2), right: window.innerWidth - hl.left + gap, transform: 'translateY(-50%)' }
+        return { top: hl.top + hl.height + gap, left: clampLeft(hl.left + hl.width / 2) }
+      case 'left':
+        if (hl.left - gap >= tw + margin) {
+          return { top: clampTop(hl.top + hl.height / 2 - 80), left: hl.left - gap - tw }
         }
-        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
-      }
-      case 'right': {
-        const spaceRight = window.innerWidth - (hl.left + hl.width) - gap
-        if (spaceRight >= tooltipW) {
-          return { top: Math.max(16, hl.top + hl.height / 2), left: hl.left + hl.width + gap, transform: 'translateY(-50%)' }
+        return { top: hl.top + hl.height + gap, left: clampLeft(hl.left + hl.width / 2) }
+      case 'right':
+        if (vw - hl.left - hl.width - gap >= tw + margin) {
+          return { top: clampTop(hl.top + hl.height / 2 - 80), left: hl.left + hl.width + gap }
         }
-        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
-      }
+        return { top: hl.top + hl.height + gap, left: clampLeft(hl.left + hl.width / 2) }
       default:
         return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
     }
@@ -1177,8 +1188,9 @@ export default function App() {
           box-shadow: 0 8px 32px rgba(0,0,0,0.2);
           max-width: 320px;
           width: calc(100vw - 32px);
-          animation: tutorialFadeIn 0.3s ease;
+          animation: tutorialFadeIn 0.25s ease;
           border: 2px solid #3B82F6;
+          transition: top 0.3s ease, left 0.3s ease, right 0.3s ease, bottom 0.3s ease;
         }
         @keyframes tutorialFadeIn {
           from { opacity: 0; transform: translateY(8px); }
