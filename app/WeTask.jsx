@@ -61,8 +61,9 @@ export default function App() {
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
   const [newMember, setNewMember] = useState({ name: '', role: '' })
   const [thanksCards, setThanksCards] = useState([])
-  const [showThanksModal, setShowThanksModal] = useState(null) // { taskId, taskName, from, to }
+  const [showThanksModal, setShowThanksModal] = useState(null) // { taskId, taskName, to }
   const [thanksMessage, setThanksMessage] = useState('')
+  const [thanksFrom, setThanksFrom] = useState('')
   const [showThanksHistory, setShowThanksHistory] = useState(false)
 
   // サーバーからデータ読み込み
@@ -236,6 +237,7 @@ export default function App() {
 
     setShowThanksModal(null)
     setThanksMessage('')
+    setThanksFrom('')
   }
 
   // 特定のログに対してTHANKSが既に送られているかチェック
@@ -535,10 +537,10 @@ export default function App() {
                 }}
                 onClick={e => {
                   e.stopPropagation()
+                  setThanksFrom('')
                   setShowThanksModal({
                     taskId: task.id,
                     taskName: task.name,
-                    from: task.assignees[0] || '',
                     to: lastLog.member,
                   })
                 }}
@@ -801,12 +803,14 @@ export default function App() {
                             fontSize: 10, color: '#EC4899', background: '#EC489912',
                             border: 'none', fontFamily: 'inherit',
                           }}
-                          onClick={() => setShowThanksModal({
-                            taskId: task.id,
-                            taskName: task.name,
-                            from: task.assignees[0] || '',
-                            to: log.member,
-                          })}
+                          onClick={() => {
+                            setThanksFrom('')
+                            setShowThanksModal({
+                              taskId: task.id,
+                              taskName: task.name,
+                              to: log.member,
+                            })
+                          }}
                           title="代行してくれた人にお礼を送る"
                         >
                           💐 THANKS
@@ -1337,7 +1341,7 @@ export default function App() {
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
           }}
-          onClick={() => { setShowThanksModal(null); setThanksMessage('') }}
+          onClick={() => { setShowThanksModal(null); setThanksMessage(''); setThanksFrom('') }}
         >
           <div
             style={{
@@ -1353,6 +1357,38 @@ export default function App() {
               「{showThanksModal.taskName}」を代行してくれた{getMemberName(showThanksModal.to)}さんにお礼を送ります
             </p>
             <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', display: 'block', marginBottom: 6 }}>
+                あなたは？
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {members.filter(m => m.id !== showThanksModal.to).map(m => (
+                  <button
+                    key={m.id}
+                    className="filter-btn"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 6, fontSize: 12,
+                      background: thanksFrom === m.id ? getAvatarColor(m.id) + '20' : '#F7F7F5',
+                      color: '#37352F', fontFamily: 'inherit',
+                      border: thanksFrom === m.id ? `2px solid ${getAvatarColor(m.id)}` : '2px solid transparent',
+                      fontWeight: thanksFrom === m.id ? 600 : 400,
+                    }}
+                    onClick={() => setThanksFrom(m.id)}
+                  >
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: getAvatarColor(m.id),
+                      color: '#fff', fontSize: 10, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {getInitials(m.name)}
+                    </div>
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#9B9A97', display: 'block', marginBottom: 4 }}>
                 メッセージ（任意）
               </label>
@@ -1365,7 +1401,6 @@ export default function App() {
                   border: '1px solid #E8E8E4', borderRadius: 6, fontFamily: 'inherit',
                   resize: 'vertical', minHeight: 60,
                 }}
-                autoFocus
               />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1375,7 +1410,7 @@ export default function App() {
                   padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500,
                   background: '#F0F0EE', color: '#37352F', border: 'none',
                 }}
-                onClick={() => { setShowThanksModal(null); setThanksMessage('') }}
+                onClick={() => { setShowThanksModal(null); setThanksMessage(''); setThanksFrom('') }}
               >
                 キャンセル
               </button>
@@ -1383,12 +1418,15 @@ export default function App() {
                 className="filter-btn"
                 style={{
                   padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600,
-                  background: '#EC4899', color: '#fff', border: 'none',
+                  background: thanksFrom ? '#EC4899' : '#D1D5DB',
+                  color: '#fff', border: 'none',
+                  cursor: thanksFrom ? 'pointer' : 'not-allowed',
                 }}
+                disabled={!thanksFrom}
                 onClick={() => sendThanks(
                   showThanksModal.taskId,
                   showThanksModal.taskName,
-                  showThanksModal.from,
+                  thanksFrom,
                   showThanksModal.to,
                   thanksMessage
                 )}
