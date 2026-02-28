@@ -1503,8 +1503,26 @@ export default function App() {
                         💬 {card.message}
                       </div>
                     )}
-                    <div style={{ fontSize: 10, color: '#9B9A97', marginTop: 4 }}>
-                      {formatDate(card.date)}
+                    <div style={{ fontSize: 10, color: '#9B9A97', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{formatDate(card.date)}</span>
+                      <button
+                        className="filter-btn"
+                        style={{
+                          padding: '1px 6px', borderRadius: 3,
+                          fontSize: 10, color: '#E84855', background: '#E8485512',
+                          border: 'none', fontFamily: 'inherit',
+                        }}
+                        onClick={() => {
+                          fetch('/api/thanks', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: card.id }),
+                          }).catch(err => console.error('削除エラー:', err))
+                          setThanksCards(prev => prev.filter(c => c.id !== card.id))
+                        }}
+                      >
+                        削除
+                      </button>
                     </div>
                   </div>
                 ))}

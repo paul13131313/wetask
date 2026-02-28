@@ -26,3 +26,11 @@ export async function POST(request) {
   await kvSet(THANKS_KEY, thanks)
   return NextResponse.json({ ok: true, card: newCard })
 }
+
+export async function DELETE(request) {
+  const { id } = await request.json()
+  const thanks = (await kvGet(THANKS_KEY)) || []
+  const filtered = thanks.filter(c => c.id !== id)
+  await kvSet(THANKS_KEY, filtered)
+  return NextResponse.json({ ok: true })
+}
