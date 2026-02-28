@@ -1,6 +1,7 @@
 import './globals.css'
 
 export const metadata = {
+  metadataBase: new URL('https://wetask-two.vercel.app'),
   title: 'We TASK - チームの雑務を見える化するボード',
   description: 'チーム8人の雑務管理ボード。固定担当・ローテーション・フレキシブルの3パターンで雑務を見える化。',
   openGraph: {
