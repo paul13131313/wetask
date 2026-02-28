@@ -124,7 +124,7 @@ export default function App() {
       target: '[data-tutorial="add-task-btn"]',
       title: '雑務を追加 ＋',
       body: 'ここから新しい雑務を登録できます。\n雑務名、頻度、担当タイプを設定して追加しましょう。',
-      position: 'bottom',
+      position: 'left',
       interactive: false,
     },
     {
@@ -1160,13 +1160,14 @@ export default function App() {
           position: fixed;
           z-index: 201;
           pointer-events: auto;
-          background: #fff;
-          border-radius: 12px;
+          background: #F0F7FF;
+          border-radius: 14px;
           padding: 20px 24px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.2);
           max-width: 320px;
           width: calc(100vw - 32px);
           animation: tutorialFadeIn 0.3s ease;
+          border: 2px solid #3B82F6;
         }
         @keyframes tutorialFadeIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -1812,13 +1813,13 @@ export default function App() {
 
             {/* Tooltip */}
             <div className="tutorial-tooltip" style={tooltipStyle}>
-              <div style={{ fontSize: 11, color: '#9B9A97', marginBottom: 4 }}>
-                {tutorialStep + 1} / {TUTORIAL_STEPS.length}
+              <div style={{ fontSize: 11, color: '#3B82F6', marginBottom: 4, fontWeight: 600 }}>
+                STEP {tutorialStep + 1} / {TUTORIAL_STEPS.length}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#37352F', marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#1E3A5F', marginBottom: 8 }}>
                 {step.title}
               </div>
-              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#4B5563', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 16 }}>
                 {step.body}
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -1826,7 +1827,7 @@ export default function App() {
                   className="filter-btn"
                   style={{
                     padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                    background: '#F0F0EE', color: '#9B9A97', border: 'none',
+                    background: '#E5E7EB', color: '#6B7280', border: 'none',
                   }}
                   onClick={endTutorial}
                 >
