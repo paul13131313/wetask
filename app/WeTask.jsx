@@ -189,15 +189,26 @@ export default function App() {
       return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
     }
     const gap = 16
+    const tooltipW = 320
     switch (position) {
       case 'top':
         return { bottom: window.innerHeight - hl.top + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
       case 'bottom':
         return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
-      case 'left':
-        return { top: Math.max(16, hl.top + hl.height / 2), right: window.innerWidth - hl.left + gap, transform: 'translateY(-50%)' }
-      case 'right':
-        return { top: Math.max(16, hl.top + hl.height / 2), left: hl.left + hl.width + gap, transform: 'translateY(-50%)' }
+      case 'left': {
+        const spaceLeft = hl.left - gap
+        if (spaceLeft >= tooltipW) {
+          return { top: Math.max(16, hl.top + hl.height / 2), right: window.innerWidth - hl.left + gap, transform: 'translateY(-50%)' }
+        }
+        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
+      }
+      case 'right': {
+        const spaceRight = window.innerWidth - (hl.left + hl.width) - gap
+        if (spaceRight >= tooltipW) {
+          return { top: Math.max(16, hl.top + hl.height / 2), left: hl.left + hl.width + gap, transform: 'translateY(-50%)' }
+        }
+        return { top: hl.top + hl.height + gap, left: Math.max(16, Math.min(hl.left + hl.width / 2, window.innerWidth - 180)), transform: 'translateX(-50%)' }
+      }
       default:
         return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
     }
@@ -1808,6 +1819,9 @@ export default function App() {
                 pointerEvents: 'auto',
                 cursor: 'pointer',
                 borderRadius: 8,
+              }} onClick={() => {
+                const target = document.querySelector(step.target)
+                if (target) target.click()
               }} />
             )}
 
