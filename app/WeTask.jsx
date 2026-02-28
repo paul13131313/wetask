@@ -185,14 +185,14 @@ export default function App() {
   }
 
   function getTutorialTooltipStyle(position, hl) {
-    if (position === 'center' || !hl) {
-      return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-    }
     const gap = 16
     const margin = 16
     const vw = window.innerWidth
     const vh = window.innerHeight
     const tw = Math.min(320, vw - margin * 2)
+    if (position === 'center' || !hl) {
+      return { top: Math.max(margin, (vh - 200) / 2), left: Math.max(margin, (vw - tw) / 2) }
+    }
 
     // 横位置を画面内にクランプするヘルパー
     function clampLeft(centerX) {
