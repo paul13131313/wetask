@@ -1190,7 +1190,6 @@ export default function App() {
           width: calc(100vw - 32px);
           animation: tutorialFadeIn 0.25s ease;
           border: 2px solid #3B82F6;
-          transition: top 0.3s ease, left 0.3s ease, right 0.3s ease, bottom 0.3s ease;
         }
         @keyframes tutorialFadeIn {
           from { opacity: 0; transform: translateY(8px); }
