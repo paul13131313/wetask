@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 const INITIAL_MEMBERS = [
   { id: 'fukuda', name: '福田将己', role: '代表取締役' },
@@ -51,9 +51,27 @@ function formatDate(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function loadFromStorage(key, fallback) {
+  try {
+    const saved = localStorage.getItem(`wetask_${key}`)
+    if (saved) return JSON.parse(saved)
+  } catch (e) {
+    console.error(`localStorage読み込みエラー (${key}):`, e)
+  }
+  return fallback
+}
+
+function saveToStorage(key, value) {
+  try {
+    localStorage.setItem(`wetask_${key}`, JSON.stringify(value))
+  } catch (e) {
+    console.error(`localStorage保存エラー (${key}):`, e)
+  }
+}
+
 export default function App() {
-  const [members, setMembers] = useState(INITIAL_MEMBERS)
-  const [tasks, setTasks] = useState(INITIAL_TASKS)
+  const [members, setMembers] = useState(() => loadFromStorage('members', INITIAL_MEMBERS))
+  const [tasks, setTasks] = useState(() => loadFromStorage('tasks', INITIAL_TASKS))
   const [view, setView] = useState('board')
   const [filter, setFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
@@ -61,6 +79,11 @@ export default function App() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', frequency: '不定期', type: 'fixed' })
   const [newMember, setNewMember] = useState({ name: '', role: '' })
+
+  // localStorageへ自動保存
+  useEffect(() => { saveToStorage('members', members) }, [members])
+  useEffect(() => { saveToStorage('tasks', tasks) }, [tasks])
+
   const [dragState, setDragState] = useState({ draggingId: null, overId: null, dragType: null })
   const [memberDragOver, setMemberDragOver] = useState(null)
   const [doneSelectingId, setDoneSelectingId] = useState(null)
