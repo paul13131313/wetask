@@ -84,7 +84,7 @@ export default function App() {
       target: '[data-tutorial="task-grid"]',
       title: 'タスクボード',
       body: 'チームの雑務がカードで一覧表示されます。\n📌固定担当・🔄ローテーション・🤝フレキシブルの3タイプがあります。',
-      position: 'top',
+      position: 'center',
       interactive: false,
     },
     {
