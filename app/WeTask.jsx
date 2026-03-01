@@ -44,6 +44,8 @@ function useSaveToServer(members, tasks, skipSave) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tasks, members }),
+      }).then(res => {
+        if (!res.ok) console.error('保存エラー: HTTP', res.status)
       }).catch(err => console.error('保存エラー:', err))
     }, 500)
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
@@ -253,8 +255,14 @@ export default function App() {
   // サーバーからデータ読み込み
   useEffect(() => {
     Promise.all([
-      fetch('/api/tasks').then(res => res.json()),
-      fetch('/api/thanks').then(res => res.json()),
+      fetch('/api/tasks').then(res => {
+        if (!res.ok) throw new Error(`tasks API ${res.status}`)
+        return res.json()
+      }),
+      fetch('/api/thanks').then(res => {
+        if (!res.ok) throw new Error(`thanks API ${res.status}`)
+        return res.json()
+      }),
     ])
       .then(([taskData, thanksData]) => {
         setMembers(taskData.members)
@@ -264,6 +272,9 @@ export default function App() {
       })
       .catch(err => {
         console.error('読み込みエラー:', err)
+        // 初期データで起動（オフラインでも使える）
+        setMembers(INITIAL_MEMBERS)
+        setTasks(INITIAL_TASKS)
         setLoading(false)
       })
   }, [])
@@ -420,7 +431,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, taskName, from: fromId, to: toId, message }),
       })
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          return res.json()
+        })
         .then(data => {
           if (data.card) {
             setThanksCards(prev => [data.card, ...prev])
@@ -1771,12 +1785,14 @@ export default function App() {
                           border: 'none', fontFamily: 'inherit',
                         }}
                         onClick={() => {
+                          setThanksCards(prev => prev.filter(c => c.id !== card.id))
                           fetch('/api/thanks', {
                             method: 'DELETE',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id: card.id }),
+                          }).then(res => {
+                            if (!res.ok) console.error('削除エラー: HTTP', res.status)
                           }).catch(err => console.error('削除エラー:', err))
-                          setThanksCards(prev => prev.filter(c => c.id !== card.id))
                         }}
                       >
                         削除
