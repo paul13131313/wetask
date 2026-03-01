@@ -66,6 +66,7 @@ export default function App() {
   const [thanksMessage, setThanksMessage] = useState('')
   const [thanksFrom, setThanksFrom] = useState('')
   const [showThanksHistory, setShowThanksHistory] = useState(false)
+  const [thanksSort, setThanksSort] = useState('new') // 'new' or 'old'
   const [isTutorial, setIsTutorial] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialHighlight, setTutorialHighlight] = useState(null)
@@ -1698,16 +1699,30 @@ export default function App() {
             }}
             onClick={e => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: '#37352F' }}>
-              💐 THANKSカード履歴
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#37352F', margin: 0 }}>
+                💐 THANKSカード履歴
+              </h2>
+              {thanksCards.length > 1 && (
+                <button
+                  className="filter-btn"
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                    background: '#F0F0EE', color: '#37352F', border: 'none', fontFamily: 'inherit',
+                  }}
+                  onClick={() => setThanksSort(prev => prev === 'new' ? 'old' : 'new')}
+                >
+                  {thanksSort === 'new' ? '🔽 新しい順' : '🔼 古い順'}
+                </button>
+              )}
+            </div>
             {thanksCards.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0', color: '#9B9A97', fontSize: 14 }}>
                 まだTHANKSカードはありません
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {thanksCards.map(card => (
+                {(thanksSort === 'old' ? [...thanksCards].reverse() : thanksCards).map(card => (
                   <div key={card.id} style={{
                     padding: '12px 14px', borderRadius: 8,
                     background: 'linear-gradient(135deg, #FDF2F8, #FCE7F3)',
