@@ -771,26 +771,51 @@ export default function App() {
           </div>
         )}
 
-        {/* Done button — opens member selector */}
+        {/* Done buttons — quick complete + proxy complete */}
         {!isEditing && !isDoneSelecting && (
-          <button
-            className="filter-btn"
-            data-tutorial={isFirstCard ? 'done-button-first' : undefined}
-            style={{
-              position: 'absolute', top: 12, right: 12,
-              padding: '3px 8px', borderRadius: 4,
-              fontSize: 11, fontWeight: 600,
-              background: '#10B98118', color: '#10B981', border: 'none',
-            }}
-            onClick={e => {
-              e.stopPropagation()
-              setDoneSelectingId(task.id)
-              setEditingId(null)
-            }}
-            title="この雑務を完了する"
-          >
-            ✓ 完了する
-          </button>
+          <div style={{
+            position: 'absolute', top: 10, right: 10,
+            display: 'flex', gap: 4, alignItems: 'center',
+          }}>
+            <button
+              className="filter-btn"
+              data-tutorial={isFirstCard ? 'done-button-first' : undefined}
+              style={{
+                padding: '3px 10px', borderRadius: 4,
+                fontSize: 11, fontWeight: 600,
+                background: '#10B981', color: '#fff', border: 'none',
+              }}
+              onClick={e => {
+                e.stopPropagation()
+                const assigneeId = task.assignees?.[0]
+                if (assigneeId) {
+                  markDone(task.id, assigneeId)
+                } else {
+                  setDoneSelectingId(task.id)
+                  setEditingId(null)
+                }
+              }}
+              title="担当者が対応して完了"
+            >
+              ✅ 完了
+            </button>
+            <button
+              className="filter-btn"
+              style={{
+                padding: '3px 8px', borderRadius: 4,
+                fontSize: 10, fontWeight: 500,
+                background: '#F7F7F5', color: '#9B9A97', border: '1px solid #E8E8E4',
+              }}
+              onClick={e => {
+                e.stopPropagation()
+                setDoneSelectingId(task.id)
+                setEditingId(null)
+              }}
+              title="担当者以外が代行で完了"
+            >
+              🤝 代行
+            </button>
+          </div>
         )}
 
         {/* Done member selector dropdown */}
